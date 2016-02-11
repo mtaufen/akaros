@@ -10,6 +10,7 @@
 #include <monitor.h>
 #include <arch/usb.h>
 
+uint64_t x86_default_xcr0;
 struct ancillary_state x86_default_fpu;
 uint32_t kerndate;
 
