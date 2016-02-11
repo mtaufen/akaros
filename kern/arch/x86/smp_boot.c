@@ -283,6 +283,8 @@ void __arch_pcpu_init(uint32_t coreid)
 	/* Ensure the FPU units are initialized */
 	asm volatile ("fninit");
 
+	// TODO/XXX: Also set pcpu xcr0 from x86_default_xcr0 here.
+
 	/* Enable SSE instructions.  We might have to do more, like masking certain
 	 * flags or exceptions in the MXCSR, or at least handle the SIMD exceptions.
 	 * We don't do it for FP yet either, so YMMV. */

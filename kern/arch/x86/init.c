@@ -2,6 +2,7 @@
 
 #include <smp.h>
 
+#include <arch/x86.h>
 #include <arch/pci.h>
 #include <arch/console.h>
 #include <arch/perfmon.h>
@@ -9,7 +10,16 @@
 #include <console.h>
 #include <monitor.h>
 #include <arch/usb.h>
+#include <assert.h>
 
+
+/*
+	x86_default_xcr0 is the Akaros-wide
+	default value for the xcr0 register.
+
+	It is set on every processor during
+	per-cpu init.
+*/
 uint64_t x86_default_xcr0;
 struct ancillary_state x86_default_fpu;
 uint32_t kerndate;
@@ -72,8 +82,47 @@ static void cons_irq_init(void)
 	}
 }
 
+#define CPUID_XSAVE_SUPPORT         (1 << 26)
+#define CPUID_XSAVEOPT_SUPPORT      (1 << 0)
+void x86_extended_state_init() {
+	uint32_t eax, ebx, ecx, edx;
+	uint64_t proc_supported_features; /* proc supported user state components */
+
+	// Note: The cpuid function comes from arch/x86.h
+	// arg1 is eax input, arg2 is ecx input, then
+	// eax, ebx, ecx, edx.
+
+	// First check general XSAVE support. Die if not supported.
+	cpuid(0x01, 0x00, 0, 0, &ecx, 0);
+	if (!(CPUID_XSAVE_SUPPORT & ecx)) {
+		panic("No XSAVE support! Refusing to boot.\n");
+	}
+
+	// Next check XSAVEOPT support. Die if not supported.
+	cpuid(0x0d, 0x01, &eax, 0, 0, 0);
+	if (!(CPUID_XSAVEOPT_SUPPORT & eax)) {
+		panic("No XSAVEOPT support! Refusing to boot.\n");
+	}
+
+	// Next determine the user state components supported
+	// by the processor and set x86_default_xcr0.
+
+	cpuid(0x0d, 0x00, &eax, 0, 0, &edx);
+	proc_supported_features = ((uint64_t)edx << 32) | eax;
+
+	// Intersection of processor-supported and Akaros-supported
+	// features is the Akaros-wide default at runtime.
+	x86_default_xcr0 = X86_MAX_XCR0 & proc_supported_features;
+}
+
 void arch_init()
 {
+
+	x86_extended_state_init();
+
+	// TODO/XXX: Think about moving fninit and the save_fp_state call
+	//           into x86_extended_state_init.
+
 	/* need to reinit before saving, in case boot agents used the FPU or it is
 	 * o/w dirty.  had this happen on c89, which had a full FP stack after
 	 * booting. */

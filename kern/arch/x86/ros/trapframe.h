@@ -86,15 +86,19 @@ save this value to x86_default_xcr0 in arch/x86/init.c.
 
 We guarantee that the set of feature components specified by
 X86_MAX_XCR0 will fit in the ancillary_state struct.
+
+If you add to the mask, make sure you also extend ancillary_state!
 */
-// FIXME/TODO/XXX: Disabling PKRU state (bit 9) until we find
+
+// TODO/XXX:
+// I am disabling PKRU state (bit 9) until we find
 // documentation on its offset and size in the XSAVE area.
 // Intel is very fond of telling you to "just CPUID" for this
 // information, so if you don't already have a processor that
 // has the given state component, it can be hard to find
 // how much you need to expand the extended region of the
 // XSAVE area to contain it.
-#define X86_MAX_XCR0 = 0x0ff;
+#define X86_MAX_XCR0 0x0ff
 
 typedef struct ancillary_state {
 	/* Legacy region of the XSAVE area */
