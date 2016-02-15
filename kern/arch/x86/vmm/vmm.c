@@ -1,5 +1,5 @@
 /* Copyright 2015 Google Inc.
- * 
+ *
  * See LICENSE for details.
  */
 
@@ -20,6 +20,8 @@
 #include <trap.h>
 #include <umem.h>
 
+#include <arch/x86/x86.h>
+
 /* TODO: have better cpuid info storage and checks */
 bool x86_supports_vmx = FALSE;
 
@@ -28,7 +30,7 @@ static void vmmcp_posted_handler(struct hw_trapframe *hw_tf, void *data);
 /* Figure out what kind of CPU we are on, and if it supports any reasonable
  * virtualization. For now, if we're not some sort of newer intel, don't
  * bother. This does all cores. Again, note, we make these decisions at runtime,
- * to avoid getting into the problems that compile-time decisions can cause. 
+ * to avoid getting into the problems that compile-time decisions can cause.
  * At this point, of course, it's still all intel.
  */
 void vmm_init(void)
@@ -180,6 +182,8 @@ struct guest_pcore *load_guest_pcore(struct proc *p, int guest_pcoreid)
 	pcpui->guest_pcoreid = guest_pcoreid;
 	ept_sync_context(gpc_get_eptp(gpc));
 	vmx_load_guest_pcore(gpc);
+	/* Load guest's xcr0 */
+	lxcr0(gpc->xcr0);
 	return gpc;
 }
 
@@ -195,6 +199,11 @@ void unload_guest_pcore(struct proc *p, int guest_pcoreid)
 	ept_sync_context(gpc_get_eptp(gpc));
 	vmx_unload_guest_pcore(gpc);
 	gpc->cpu = -1;
+
+	/* Save guest's xcr0 and restore Akaros's default. */
+	gpc->xcr0 = rxcr0();
+	lxcr0(x86_default_xcr0);
+
 	/* As soon as we unlock, this gpc can be started on another core */
 	spin_unlock(&p->vmm.lock);
 	pcpui->guest_pcoreid = -1;
