@@ -360,7 +360,7 @@ static inline int safe_lxcr0(uint64_t xcr0)
 	             ".previous"
 	             : "=r" (err)
 	             : "a"(eax), "c" (0), "d"(edx),
-	               "i" (-EFAULT), "0" (err));
+	               "i" (-EINVAL), "0" (err));
 }
 
 static inline uint64_t rxcr0()

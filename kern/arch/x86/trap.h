@@ -166,15 +166,32 @@ static inline void save_fp_state(struct ancillary_state *silly)
 	asm volatile("xsaveopt64 %0" : : "m"(*silly), "a"(eax), "d"(edx));
 }
 
-/* TODO: this can trigger a GP fault if MXCSR reserved bits are set.  Callers
- * will need to handle intercepting the kernel fault. */
+/* WARNING: Only use this if you are sure your silly state isn't goofing around
+ *          Otherwise use safe_restore_fp_state
+ */
 static inline void restore_fp_state(struct ancillary_state *silly)
 {
-	//#warning "XRSTOR64 may cause a #GP fault in certain conditions. TODO: Add fault handling here!"
 	uint32_t eax, edx;
 	edx = x86_default_xcr0 >> 32;
 	eax = x86_default_xcr0;
 	asm volatile("xrstor64 %0" : : "m"(*silly), "a"(eax), "d"(edx));
+}
+
+static inline int safe_restore_fp_state(struct ancillary_state *silly)
+{
+	int err = 0;
+	uint32_t eax, edx;
+	edx = x86_default_xcr0 >> 32;
+	eax = x86_default_xcr0;
+	asm volatile("1: xrstor64 %0\n"
+	             "2: \n"
+	             ".section .fixup, \"ax\"\n"
+	             "3: mov %4, %0\n"
+	             "   jmp 2b    \n"
+	             ".previous"
+	             : "=r" (err)
+	             : "m"(*silly), "a"(eax), "d"(edx)
+	               "i" (-EINVAL), "0" (err));
 }
 
 /* A regular fninit will only initialize the x87 header part of the FPU, not the

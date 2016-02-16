@@ -27,6 +27,7 @@ void timer_interrupt(struct hw_trapframe *hw_tf, void *data);
 
 extern inline void save_fp_state(struct ancillary_state *silly);
 extern inline void restore_fp_state(struct ancillary_state *silly);
+extern inline int safe_restore_fp_state(struct ancillary_state *silly);
 extern inline void init_fp_state(void);
 /* Set stacktop for the current core to be the stack the kernel will start on
  * when trapping/interrupting from userspace */
@@ -209,7 +210,7 @@ void print_kmsgs(uint32_t coreid);
 /* TRUE if we are allowed to spin, given that the 'lock' was declared as not
  * grabbable from IRQ context.  Meaning, we can't grab the lock from any nested
  * context.  (And for most locks, we can never grab them from a kernel trap
- * handler). 
+ * handler).
  *
  * Example is a lock that is not declared as irqsave, but we later grab it from
  * irq context.  This could deadlock the system, even if it doesn't do it this
