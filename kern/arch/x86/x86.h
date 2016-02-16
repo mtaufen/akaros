@@ -341,21 +341,34 @@ static inline void lxcr0(uint64_t xcr0)
 	uint32_t eax, edx;
 	edx = xcr0 >> 32;
 	eax = xcr0;
-	asm volatile("mov $0, %%ecx;"
-	             "xsetbv;       "
+	asm volatile("xsetbv"
 	             : /* No outputs */
-	             : "a"(eax), "d"(edx)
-	             : "%ecx");
+	             : "a"(eax), "c" (0), "d"(edx));
+}
+
+static inline int safe_lxcr0(uint64_t xcr0)
+{
+	int err = 0;
+	uint32_t eax, edx;
+	edx = xcr0 >> 32;
+	eax = xcr0;
+	asm volatile("1: xsetbv\n"
+	             "2: \n"
+	             ".section .fixup, \"ax\"\n"
+	             "3: mov %4, %0\n"
+	             "   jmp 2b    \n"
+	             ".previous"
+	             : "=r" (err)
+	             : "a"(eax), "c" (0), "d"(edx),
+	               "i" (-EFAULT), "0" (err));
 }
 
 static inline uint64_t rxcr0()
 {
 	uint32_t eax, edx;
-	asm volatile("mov $0, %%ecx;"
-	             "xgetbv;       "
+	asm volatile("xgetbv"
 	             : "=a"(eax), "=d"(edx)
-	             : /* No inputs */
-	             : "%ecx");
+	             : "c" (0));
 	return ((uint64_t)edx << 32) | eax;
 }
 
