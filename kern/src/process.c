@@ -1061,7 +1061,10 @@ static void save_vc_fp_state(struct preempt_data *vcpd)
 static void restore_vc_fp_state(struct preempt_data *vcpd)
 {
 	if (vcpd->rflags & VC_FPU_SAVED) {
-		restore_fp_state(&vcpd->preempt_anc);
+		if (restore_fp_state(&vcpd->preempt_anc)){
+			printk("Error restoring fp state! Likely a bad ancillary_state argument.\n");
+			init_fp_state();
+		}
 		vcpd->rflags &= ~VC_FPU_SAVED;
 	} else {
 		init_fp_state();

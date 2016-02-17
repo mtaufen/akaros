@@ -19,7 +19,6 @@
 #include <kmalloc.h>
 #include <ex_table.h>
 #include <arch/mptables.h>
-#include <arch/x86/x86.h>
 
 taskstate_t ts;
 
@@ -780,7 +779,7 @@ bool handle_vmexit_extirq(struct vm_trapframe *tf)
 
 static bool handle_vmexit_xsetbv(struct vm_trapframe *tf) {
 	// The VM's requested-feature bitmap is represented by edx:eax
-	uint64_t vm_rfbm = (tf->rdx << 32) | tf->rax;
+	uint64_t vm_rfbm = (tf->tf_rdx << 32) | tf->tf_rax;
 
 	// If the VM tries to set xcr0 to a superset
 	// of Akaros's default value, kill the VM.

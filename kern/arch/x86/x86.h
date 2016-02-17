@@ -2,6 +2,7 @@
 
 #include <ros/common.h>
 #include <arch/mmu.h>
+#include <ros/errno.h>
 
 /* Model Specific Registers */
 // TODO: figure out which are intel specific, and name them accordingly
@@ -361,6 +362,8 @@ static inline int safe_lxcr0(uint64_t xcr0)
 	             : "=r" (err)
 	             : "a"(eax), "c" (0), "d"(edx),
 	               "i" (-EINVAL), "0" (err));
+
+	return err;
 }
 
 static inline uint64_t rxcr0()

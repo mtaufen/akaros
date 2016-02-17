@@ -20,7 +20,7 @@
 #include <trap.h>
 #include <umem.h>
 
-#include <arch/x86/x86.h>
+#include <arch/x86.h>
 
 /* TODO: have better cpuid info storage and checks */
 bool x86_supports_vmx = FALSE;

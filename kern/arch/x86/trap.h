@@ -3,6 +3,7 @@
 #define ROS_KERN_ARCH_TRAP_H
 
 #include <ros/arch/msr-index.h>
+#include <ros/errno.h>
 
 #define NUM_IRQS					256
 
@@ -166,32 +167,23 @@ static inline void save_fp_state(struct ancillary_state *silly)
 	asm volatile("xsaveopt64 %0" : : "m"(*silly), "a"(eax), "d"(edx));
 }
 
-/* WARNING: Only use this if you are sure your silly state isn't goofing around
- *          Otherwise use safe_restore_fp_state
- */
-static inline void restore_fp_state(struct ancillary_state *silly)
-{
-	uint32_t eax, edx;
-	edx = x86_default_xcr0 >> 32;
-	eax = x86_default_xcr0;
-	asm volatile("xrstor64 %0" : : "m"(*silly), "a"(eax), "d"(edx));
-}
-
-static inline int safe_restore_fp_state(struct ancillary_state *silly)
+static inline int restore_fp_state(struct ancillary_state *silly)
 {
 	int err = 0;
 	uint32_t eax, edx;
 	edx = x86_default_xcr0 >> 32;
 	eax = x86_default_xcr0;
-	asm volatile("1: xrstor64 %0\n"
+	asm volatile("1: xrstor64 %1\n"
 	             "2: \n"
 	             ".section .fixup, \"ax\"\n"
 	             "3: mov %4, %0\n"
 	             "   jmp 2b    \n"
 	             ".previous"
 	             : "=r" (err)
-	             : "m"(*silly), "a"(eax), "d"(edx)
+	             : "m"(*silly), "a"(eax), "d"(edx),
 	               "i" (-EINVAL), "0" (err));
+
+	return err;
 }
 
 /* A regular fninit will only initialize the x87 header part of the FPU, not the
