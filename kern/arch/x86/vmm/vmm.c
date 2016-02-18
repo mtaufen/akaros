@@ -162,6 +162,7 @@ struct guest_pcore *lookup_guest_pcore(struct proc *p, int guest_pcoreid)
 	return p->vmm.guest_pcores[guest_pcoreid];
 }
 
+
 struct guest_pcore *load_guest_pcore(struct proc *p, int guest_pcoreid)
 {
 	struct guest_pcore *gpc;

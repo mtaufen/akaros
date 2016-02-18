@@ -167,6 +167,7 @@ static inline void lcr4(unsigned long val) __attribute__((always_inline));
 static inline unsigned long rcr4(void) __attribute__((always_inline));
 
 static inline void lxcr0(uint64_t xcr0) __attribute__((always_inline));
+static inline int safe_lxcr0(uint64_t xcr0) __attribute__((always_inline));
 static inline uint64_t rxcr0(void) __attribute__((always_inline));
 
 static inline unsigned long read_flags(void) __attribute__((always_inline));
