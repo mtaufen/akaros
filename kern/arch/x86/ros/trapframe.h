@@ -74,13 +74,38 @@ typedef struct {
 	unsigned int stor[4];
 } __128bits;
 
+/*
+X86_MAX_XCR0 specifies the maximum set of processor extended state
+feature components that Akaros supports saving through the
+XSAVE instructions.
+This may be a superset of available state components on a given
+processor. We CPUID at boot and determine the intersection
+of Akaros-supported and processor-supported features, and we
+save this value to x86_default_xcr0 in arch/x86/init.c.
+We guarantee that the set of feature components specified by
+X86_MAX_XCR0 will fit in the ancillary_state struct.
+If you add to the mask, make sure you also extend ancillary_state!
+*/
+
+// TODO/XXX:
+// I am disabling PKRU state (bit 9) until we find
+// documentation on its offset and size in the XSAVE area.
+// Intel is very fond of telling you to "just CPUID" for this
+// information, so if you don't already have a processor that
+// has the given state component, it can be hard to find
+// how much you need to expand the extended region of the
+// XSAVE area to contain it.
+#define X86_MAX_XCR0 0x0ff
+
 typedef struct ancillary_state {
+	/* Legacy region of the XSAVE area */
 	union { /* whichever header used depends on the mode */
 		struct fp_header_non_64bit			fp_head_n64;
 		struct fp_header_64bit_promoted		fp_head_64p;
 		struct fp_header_64bit_default		fp_head_64d;
 	};
-	__128bits		st0_mm0;	/* 128 bits: 80 for the st0, 48 rsv */
+	/* offset 32 bytes */
+	__128bits		st0_mm0;	/* 128 bits: 80 for the st0, 48 reserved */
 	__128bits		st1_mm1;
 	__128bits		st2_mm2;
 	__128bits		st3_mm3;
@@ -88,6 +113,7 @@ typedef struct ancillary_state {
 	__128bits		st5_mm5;
 	__128bits		st6_mm6;
 	__128bits		st7_mm7;
+	/* offset 160 bytes */
 	__128bits		xmm0;
 	__128bits		xmm1;
 	__128bits		xmm2;
@@ -96,7 +122,8 @@ typedef struct ancillary_state {
 	__128bits		xmm5;
 	__128bits		xmm6;
 	__128bits		xmm7;
-	__128bits		xmm8;		/* xmm8 and below only for 64-bit-mode */
+	/* xmm8-xmm15 are only available in 64-bit-mode */
+	__128bits		xmm8;
 	__128bits		xmm9;
 	__128bits		xmm10;
 	__128bits		xmm11;
@@ -104,10 +131,36 @@ typedef struct ancillary_state {
 	__128bits		xmm13;
 	__128bits		xmm14;
 	__128bits		xmm15;
+	/* offset 416 bytes */
 	__128bits		reserv0;
 	__128bits		reserv1;
 	__128bits		reserv2;
 	__128bits		reserv3;
 	__128bits		reserv4;
 	__128bits		reserv5;
-} __attribute__((aligned(16))) ancillary_state_t;
+	/* offset 512 bytes */
+
+	/* XSAVE header (64 bytes, starting at offset 512 from the XSAVE area's base address) */
+	uint64_t		xstate_bv; /* identifies the state components in the XSAVE area */
+	/*
+		xcomp_bv[bit 63] is 1 if the compacted format is used, else 0.
+		All bits in xcomp_bv should be 0 if the processor does not support the compaction
+		extensions to the XSAVE feature set.
+	*/
+	uint64_t		xcomp_bv;
+	__128bits		reserv6;
+
+	/* offset 576 bytes */
+	/*
+		Extended region of the XSAVE area
+		We currently support an extended region of up to 2112 bytes,
+		for a total ancillary_state size of 2688 bytes.
+		This supports x86 state components up through the zmm31 register.
+		If you need more, please ask!
+		See the Intel Architecture Instruction Set Extensions Programming
+		Reference page 3-3 for detailed offsets in this region.
+	*/
+	uint8_t			extended_region[2112];
+
+	/* ancillary state  */
+} __attribute__((aligned(64))) ancillary_state_t;
