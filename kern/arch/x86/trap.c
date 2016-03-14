@@ -865,9 +865,100 @@ static void vmexit_dispatch(struct vm_trapframe *tf)
 	}
 }
 
+
+static inline uint64_t min(uint64_t a, uint64_t b) {
+  if (a < b) {
+    return a;
+  }
+  return b;
+}
+
+// Rudimentary hex dumper. Misses some corner cases on
+// certain ascii values but good enough for our purposes.
+void hex_dump(void *mem, uint64_t size) {
+  // Prints 16 byte lines as space-separated hex pairs
+  uint64_t i = size;
+  uint64_t line_i = 0;
+  unsigned char *next = mem;
+  uint64_t print_ascii = 0;
+  uint64_t line_len = min(16, size);
+
+  while(i) {
+
+
+    if (print_ascii) {
+      if ('\a' == *next)      { printk("\\a"); }
+      else if ('\b' == *next) { printk("\\b"); }
+      else if ('\f' == *next) { printk("\\f"); }
+      else if ('\n' == *next) { printk("\\n"); }
+      else if ('\r' == *next) { printk("\\r"); }
+      else if ('\t' == *next) { printk("\\t"); }
+      else if ('\v' == *next) { printk("\\v"); }
+      else if ('\\' == *next) { printk("\\ "); }
+      else if ('\'' == *next) { printk("\' "); }
+      else if ('\"' == *next) { printk("\" "); }
+      else if ('\?' == *next) { printk("\? "); }
+      else { printk("%c ", *next); }
+    }
+    else {
+      // Print two bytes and a space
+      if (0x00 == *next) { printk("-- "); }
+      else               { printk("%02x ", *next); }
+    }
+    // Manipulate counters
+    i--;
+    line_i++;
+    next +=1;
+
+    if (line_len == line_i) { // we just printed the end of a line
+      line_i = 0;
+      if (print_ascii) { // we just printed the last ascii char of a line
+        print_ascii = 0;
+        printk("\n");
+      }
+      else { // we just printed the last hex byte of a line
+        print_ascii = 1;
+        // now we're going to print the line again, but in ascii
+        next -= line_len;
+        i += line_len;
+      }
+    }
+  }
+
+  printk("\n");
+
+}
+
+
+int vmehdeb = 0;
+void vmehde() {
+	vmehdeb = 1;
+}
+
+void vmehdd() {
+	vmehdeb = 0;
+}
+
 void handle_vmexit(struct vm_trapframe *tf)
 {
 	struct per_cpu_info *pcpui = &per_cpu_info[core_id()];
+
+	static uint64_t stupid_count = 0;
+	stupid_count++;
+
+	static struct ancillary_state fst;
+	static struct ancillary_state snd;
+	char *pfst = (char *)&fst;
+	char *psnd = (char *)&snd;
+
+	// Manually zero, can't trust sys fns not to clobber
+	for (uint64_t i = 0; i < sizeof(struct ancillary_state); ++i) {
+		pfst[i] = 0;
+		psnd[i] = 0;
+	}
+
+	save_fp_state(&fst);
+
 
 	tf->tf_rip = vmcs_read(GUEST_RIP);
 	tf->tf_rflags = vmcs_read(GUEST_RFLAGS);
@@ -886,9 +977,27 @@ void handle_vmexit(struct vm_trapframe *tf)
 	set_current_ctx_vm(pcpui, tf);
 	tf = &pcpui->cur_ctx->tf.vm_tf;
 	vmexit_dispatch(tf);
+
+
 	/* We're either restarting a partial VM ctx (vmcs was launched, loaded on
 	 * the core, etc) or a SW vc ctx for the reflected trap.  Or the proc is
 	 * dying and we'll handle a __death KMSG shortly. */
+	save_fp_state(&snd);
+	for (uint64_t i = 0; i < sizeof(struct ancillary_state); ++i) {
+		if (*pfst != *psnd)
+			panic("FP State comparison failed on byte %d", i);
+		pfst++;
+		psnd++;
+
+	}
+	if (vmehdeb) {
+		printk("Hex duump of the saved thing (fst):\n");
+		hex_dump(&fst, sizeof(struct ancillary_state));
+
+
+		printk("Hex duump of the saved thing (snd):\n");
+		hex_dump(&snd, sizeof(struct ancillary_state));
+	}
 	proc_restartcore();
 }
 

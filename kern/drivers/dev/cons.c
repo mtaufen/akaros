@@ -631,7 +631,7 @@ static struct dirtab consdir[] = {
 	{"hostdomain", {Qhostdomain}, DOMLEN, 0664},
 	{"hostowner", {Qhostowner}, 0, 0664},
 	{"klog", {Qklog}, 0, 0440},
-	{"kmesg", {Qkmesg}, 0, 0440},
+	{"kmesg", {Qkmesg}, 0, 0444},
 	{"kprint", {Qkprint, 0, QTEXCL}, 0, DMEXCL | 0440},
 	{"null", {Qnull}, 0, 0666},
 	{"osversion", {Qosversion}, 0, 0444},
