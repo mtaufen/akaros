@@ -958,7 +958,10 @@ void handle_vmexit(struct vm_trapframe *tf)
 	}
 
 	save_fp_state(&fst);
-
+	if (vmehdeb) {
+		printk("Hex duump of the saved thing (fst):\n");
+		hex_dump(&fst, sizeof(struct ancillary_state));
+	}
 
 	tf->tf_rip = vmcs_read(GUEST_RIP);
 	tf->tf_rflags = vmcs_read(GUEST_RFLAGS);
@@ -991,10 +994,6 @@ void handle_vmexit(struct vm_trapframe *tf)
 
 	}
 	if (vmehdeb) {
-		printk("Hex duump of the saved thing (fst):\n");
-		hex_dump(&fst, sizeof(struct ancillary_state));
-
-
 		printk("Hex duump of the saved thing (snd):\n");
 		hex_dump(&snd, sizeof(struct ancillary_state));
 	}
