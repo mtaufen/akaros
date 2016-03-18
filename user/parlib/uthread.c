@@ -12,6 +12,100 @@
 #include <parlib/assert.h>
 #include <parlib/arch/trap.h>
 
+
+
+
+ static inline uint64_t min(uint64_t a, uint64_t b) {
+  if (a < b) {
+    return a;
+  }
+  return b;
+}
+
+// Rudimentary hex dumper. Misses some corner cases on
+// certain ascii values but good enough for our purposes.
+static void hex_dump(void *mem, uint64_t size) {
+  // Prints 16 byte lines as space-separated hex pairs
+  uint64_t i = size;
+  uint64_t line_i = 0;
+  unsigned char *next = mem;
+  uint64_t print_ascii = 0;
+  uint64_t line_len = min(16, size);
+
+  while(i) {
+
+
+    if (print_ascii) {
+      if ('\a' == *next)      { printf("\\a"); }
+      else if ('\b' == *next) { printf("\\b"); }
+      else if ('\f' == *next) { printf("\\f"); }
+      else if ('\n' == *next) { printf("\\n"); }
+      else if ('\r' == *next) { printf("\\r"); }
+      else if ('\t' == *next) { printf("\\t"); }
+      else if ('\v' == *next) { printf("\\v"); }
+      else if ('\\' == *next) { printf("\\ "); }
+      else if ('\'' == *next) { printf("\' "); }
+      else if ('\"' == *next) { printf("\" "); }
+      else if ('\?' == *next) { printf("\? "); }
+      else { printf("%c ", *next); }
+    }
+    else {
+      // Print two bytes and a space
+      if (0x00 == *next) { printf("-- "); }
+      else               { printf("%02x ", *next); }
+    }
+    // Manipulate counters
+    i--;
+    line_i++;
+    next +=1;
+
+    if (line_len == line_i) { // we just printed the end of a line
+      line_i = 0;
+      if (print_ascii) { // we just printed the last ascii char of a line
+        print_ascii = 0;
+        printf("\n");
+      }
+      else { // we just printed the last hex byte of a line
+        print_ascii = 1;
+        // now we're going to print the line again, but in ascii
+        next -= line_len;
+        i += line_len;
+      }
+    }
+  }
+
+  printf("\n");
+
+}
+
+struct ancillary_state derpxero;
+struct ancillary_state custom_anc;
+
+static inline int as_cmp (const void *_a, const void *_b, size_t n) {
+  char *a = (char*)_a;
+  char *b = (char*)_b;
+  while(n--) {
+    if (*a != *b) return 1;
+    a++;
+    b++;
+  }
+  return 0;
+}
+
+
+static inline void hdca(const char *file, int line) {
+		printf("\nCUSTOM_ANC_UTH:\n%s:%d\n", file, line);
+		hex_dump(&custom_anc, 416);
+}
+
+static inline void afp(struct ancillary_state *as, const char *file, int line) {
+	//as_cmp(&custom_anc, as, 416);
+		// if (as_cmp(&custom_anc, as, 416)) { // only really need to cmp through xmms
+		// 	custom_anc = derpxero;
+		// 	//printf("Ancillary state match fail at: %s:%d\n", file, line);
+		// }
+}
+
 /* SCPs have a default 2LS that only manages thread 0.  Any other 2LS, such as
  * pthreads, should override sched_ops in its init code. */
 extern struct schedule_ops thread0_2ls_ops;
@@ -249,6 +343,9 @@ void __attribute__((noreturn)) uthread_vcore_entry(void)
                save_fp_state(&current_uthread->as);
                current_uthread->flags |= UTHREAD_FPSAVED;
        }
+
+      	save_fp_state(&custom_anc);
+      	afp(&current_uthread->as, __FILE__, __LINE__);
 
 	/* If someone is stealing our uthread (from when we were preempted before),
 	 * we can't touch our uthread.  But we might be the last vcore around, so
