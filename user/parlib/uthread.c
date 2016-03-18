@@ -93,17 +93,17 @@ static inline int as_cmp (const void *_a, const void *_b, size_t n) {
 }
 
 
+
 static inline void hdca(const char *file, int line) {
 		printf("\nCUSTOM_ANC_UTH:\n%s:%d\n", file, line);
 		hex_dump(&custom_anc, 416);
 }
 
 static inline void afp(struct ancillary_state *as, const char *file, int line) {
-	//as_cmp(&custom_anc, as, 416);
-		// if (as_cmp(&custom_anc, as, 416)) { // only really need to cmp through xmms
-		// 	custom_anc = derpxero;
-		// 	//printf("Ancillary state match fail at: %s:%d\n", file, line);
-		// }
+	printf("afp at: %s:%d\n", file, line);
+		if (as_cmp(&custom_anc, as, 416)) { // only really need to cmp through xmms
+			printf("Ancillary state match fail at: %s:%d\n", file, line);
+		}
 }
 
 /* SCPs have a default 2LS that only manages thread 0.  Any other 2LS, such as
@@ -342,10 +342,9 @@ void __attribute__((noreturn)) uthread_vcore_entry(void)
        if (current_uthread && current_uthread->u_ctx.type != ROS_SW_CTX) {
                save_fp_state(&current_uthread->as);
                current_uthread->flags |= UTHREAD_FPSAVED;
+              save_fp_state(&custom_anc);
+              printf("Saved fp state (uthread_vcore_entry) at %s:%d\n", __FILE__, __LINE__);
        }
-
-      	save_fp_state(&custom_anc);
-      	afp(&current_uthread->as, __FILE__, __LINE__);
 
 	/* If someone is stealing our uthread (from when we were preempted before),
 	 * we can't touch our uthread.  But we might be the last vcore around, so
@@ -531,6 +530,8 @@ void uthread_yield(bool save_state, void (*yield_func)(struct uthread*, void*),
 	/* TODO: remove this when all arches support SW contexts */
 	if (save_state && (uthread->u_ctx.type != ROS_SW_CTX)) {
 		save_fp_state(&uthread->as);
+		save_fp_state(&custom_anc);
+         printf("Saved fp state (uthread_yield) at %s:%d\n", __FILE__, __LINE__);
 		uthread->flags |= UTHREAD_FPSAVED;
 	}
 	/* Change to the transition context (both TLS (if applicable) and stack). */
@@ -727,6 +728,7 @@ void run_current_uthread(void)
        /* feel like we might merge a bit with run_uth */
        if (current_uthread->flags & UTHREAD_FPSAVED) {
                current_uthread->flags &= ~UTHREAD_FPSAVED;
+               afp(&current_uthread->as, __FILE__, __LINE__);
                restore_fp_state(&current_uthread->as);
        }
 
@@ -781,6 +783,7 @@ void run_uthread(struct uthread *uthread)
 	current_uthread = uthread;
 	if (uthread->flags & UTHREAD_FPSAVED) {
 		uthread->flags &= ~UTHREAD_FPSAVED;
+		afp(&uthread->as, __FILE__, __LINE__); // Probably expect this to fail the first time a uthread is run
 		restore_fp_state(&uthread->as);
 	}
 	set_uthread_tls(uthread, vcoreid);
@@ -811,6 +814,7 @@ static void __run_current_uthread_raw(void)
        /* feel like we might merge a bit with run_uth */
        if (current_uthread->flags & UTHREAD_FPSAVED) {
                current_uthread->flags &= ~UTHREAD_FPSAVED;
+               afp(&current_uthread->as, __FILE__, __LINE__);
                restore_fp_state(&current_uthread->as);
        }
 
@@ -882,10 +886,17 @@ static void copyout_uthread(struct preempt_data *vcpd, struct uthread *uthread,
 	 * state is in the actual FPU, not VCPD.  It might also be in VCPD, but it
 	 * will always be in the FPU (the kernel maintains this for us, in the event
 	 * we were preempted since the uthread was last running). */
-	if (vcore_local)
-		save_fp_state(&uthread->as);
+	if (vcore_local){
+			save_fp_state(&uthread->as);
+				save_fp_state(&custom_anc);
+              printf("Saved fp state (copyout_uthread) at %s:%d\n", __FILE__, __LINE__);
+		}
 	else
-		uthread->as = vcpd->preempt_anc;
+		{
+			uthread->as = vcpd->preempt_anc;
+			custom_anc = vcpd->preempt_anc;
+              printf("Copied fp state from vcpd (copyout_uthread) at %s:%d\n", __FILE__, __LINE__);
+		}
 	uthread->flags |= UTHREAD_FPSAVED;
 }
 
