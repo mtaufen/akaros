@@ -929,6 +929,7 @@ void hex_dump(void *mem, uint64_t size) {
 
 }
 
+struct ancillary_state custom_anc;
 
 int vmehdeb = 0;
 void vmehde() {
@@ -939,29 +940,61 @@ void vmehdd() {
 	vmehdeb = 0;
 }
 
+void hd_vcpd(const char *file, int line) {
+	if (vmehdeb) {
+		struct per_cpu_info *pcpui = &per_cpu_info[core_id()];
+		struct proc *p = pcpui->cur_proc;
+		struct preempt_data *vcpd = &p->procdata->vcore_preempt_data[pcpui->owning_vcoreid];
+		printk("\nVCPD:\n%s:%d:core%d\n", file, line, core_id_early());
+		hex_dump(&vcpd->preempt_anc, 416);
+	}
+}
+
+void hd_custom_anc() {
+	if (vmehdeb) {
+		printk("\nCUSTOM_ANC:\n");
+		hex_dump(&custom_anc, 416);
+	}
+}
+
+static void save_vc_fp_state(struct preempt_data *vcpd)
+{
+	save_fp_state(&vcpd->preempt_anc);
+	vcpd->rflags |= VC_FPU_SAVED;
+}
+
+
 void handle_vmexit(struct vm_trapframe *tf)
 {
 	struct per_cpu_info *pcpui = &per_cpu_info[core_id()];
+	struct proc *p = pcpui->cur_proc;
+	// TODO: use 0 or owning_vcoreid?
+	struct preempt_data *vcpd = &p->procdata->vcore_preempt_data[pcpui->owning_vcoreid];
 
-	static uint64_t stupid_count = 0;
-	stupid_count++;
+	//save_fp_state(&vcpd->preempt_anc);
+	// save_fp_state(&custom_anc);
+	// char *pcustom_anc = (char *)&custom_anc;
+	// for (uint64_t i = 0; i < sizeof(struct ancillary_state); ++i) {
+	// 	pcustom_anc[i] = 0;
+	// }
+	// save_fp_state(&custom_anc);
 
-	static struct ancillary_state fst;
-	static struct ancillary_state snd;
-	char *pfst = (char *)&fst;
-	char *psnd = (char *)&snd;
+	// static struct ancillary_state fst;
+	// static struct ancillary_state snd;
+	// char *pfst = (char *)&fst;
+	// char *psnd = (char *)&snd;
 
-	// Manually zero, can't trust sys fns not to clobber
-	for (uint64_t i = 0; i < sizeof(struct ancillary_state); ++i) {
-		pfst[i] = 0;
-		psnd[i] = 0;
-	}
+	// // Manually zero, can't trust sys fns not to clobber
+	// for (uint64_t i = 0; i < sizeof(struct ancillary_state); ++i) {
+	// 	pfst[i] = 0;
+	// 	psnd[i] = 0;
+	// }
 
-	save_fp_state(&fst);
-	if (vmehdeb) {
-		printk("Hex duump of the saved thing (fst):\n");
-		hex_dump(&fst, sizeof(struct ancillary_state));
-	}
+	// save_fp_state(&fst);
+	// if (vmehdeb) {
+	// 	printk("Hex duump of the saved thing (fst):\n");
+	// 	hex_dump(&fst, sizeof(struct ancillary_state));
+	// }
 
 	tf->tf_rip = vmcs_read(GUEST_RIP);
 	tf->tf_rflags = vmcs_read(GUEST_RFLAGS);
@@ -985,18 +1018,18 @@ void handle_vmexit(struct vm_trapframe *tf)
 	/* We're either restarting a partial VM ctx (vmcs was launched, loaded on
 	 * the core, etc) or a SW vc ctx for the reflected trap.  Or the proc is
 	 * dying and we'll handle a __death KMSG shortly. */
-	save_fp_state(&snd);
-	for (uint64_t i = 0; i < sizeof(struct ancillary_state); ++i) {
-		if (*pfst != *psnd)
-			panic("FP State comparison failed on byte %d", i);
-		pfst++;
-		psnd++;
+	// save_fp_state(&snd);
+	// for (uint64_t i = 0; i < sizeof(struct ancillary_state); ++i) {
+	// 	if (*pfst != *psnd)
+	// 		panic("FP State comparison failed on byte %d", i);
+	// 	pfst++;
+	// 	psnd++;
 
-	}
-	if (vmehdeb) {
-		printk("Hex duump of the saved thing (snd):\n");
-		hex_dump(&snd, sizeof(struct ancillary_state));
-	}
+	// }
+	// if (vmehdeb) {
+	// 	printk("Hex duump of the saved thing (snd):\n");
+	// 	hex_dump(&snd, sizeof(struct ancillary_state));
+	// }
 	proc_restartcore();
 }
 

@@ -9,6 +9,20 @@
 #include <assert.h>
 #include <stdio.h>
 
+
+
+/* Conditionally restores the FP state from VCPD.  If the state was not valid,
+ * we don't bother restoring and just initialize the FPU. */
+static void restore_vc_fp_state(struct preempt_data *vcpd)
+{
+	if (vcpd->rflags & VC_FPU_SAVED) {
+		restore_fp_state(&vcpd->preempt_anc);
+		vcpd->rflags &= ~VC_FPU_SAVED;
+	} else {
+		init_fp_state();
+	}
+}
+
 static void __attribute__((noreturn)) proc_pop_hwtf(struct hw_trapframe *tf)
 {
 	/* for both HW and SW, note we pass an offset into the TF, beyond the fs and
@@ -91,11 +105,25 @@ static void __attribute__((noreturn)) handle_bad_vm_tf(struct vm_trapframe *tf)
 	proc_pop_ctx(pcpui->cur_ctx);
 }
 
+static inline uint64_t min(uint64_t a, uint64_t b) {
+  if (a < b) {
+    return a;
+  }
+  return b;
+}
+
+// Rudimentary hex dumper. Misses some corner cases on
+// certain ascii values but good enough for our purposes.
+extern void hd_vcpd();
+extern void hd_custom_anc();
+
 static void __attribute__((noreturn)) proc_pop_vmtf(struct vm_trapframe *tf)
 {
 	struct per_cpu_info *pcpui = &per_cpu_info[core_id()];
 	struct proc *p = pcpui->cur_proc;
 	struct guest_pcore *gpc;
+	// TODO: use 0 or owning_vcoreid?
+	struct preempt_data *vcpd = &p->procdata->vcore_preempt_data[pcpui->owning_vcoreid];
 
 	if (x86_vmtf_is_partial(tf)) {
 		gpc = lookup_guest_pcore(p, tf->tf_guest_pcoreid);
@@ -121,6 +149,15 @@ static void __attribute__((noreturn)) proc_pop_vmtf(struct vm_trapframe *tf)
 	 * will arrive after we vmenter, since IRQs are currently disabled. */
 	if (test_bit(VMX_POSTED_OUTSTANDING_NOTIF, gpc->posted_irq_desc))
 		send_self_ipi(I_POKE_CORE);
+
+
+	// TODO restore fp state
+	//printk("proc_pop_vmtf\n");
+	hd_vcpd(__FILE__, __LINE__);
+
+	//restore_fp_state(&vcpd->preempt_anc);
+	// restore_fp_state(&custom_anc);
+
 	/* vmlaunch/resume can fail, so we need to be able to return from this.
 	 * Thus we can't clobber rsp via the popq style of setting the registers.
 	 * Likewise, we don't want to lose rbp via the clobber list.

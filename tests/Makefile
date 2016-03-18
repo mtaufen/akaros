@@ -13,7 +13,7 @@ TESTS_LDLIBS := -lpthread -lbenchutil -lm -liplib -lndblib -lvmm
 TESTS_SRCS_C := $(wildcard $(TESTS_DIR)/*.c)
 TESTS_SRCS_CPP := $(wildcard $(TESTS_DIR)/*.cc)
 
-TESTS_LDDEPENDS_C := $(TESTS_DIR)/%.c 
+TESTS_LDDEPENDS_C := $(TESTS_DIR)/%.c
 TESTS_LDDEPENDS_CPP := $(TESTS_DIR)/%.cc
 
 TESTS_EXECS_C  = $(patsubst $(TESTS_DIR)/%.c, \

@@ -198,7 +198,7 @@ static inline void save_fp_state(struct ancillary_state *silly)
 	if (cpu_has_feat(CPU_FEAT_X86_XSAVEOPT)) {
 		edx = x86_default_xcr0 >> 32;
 		eax = x86_default_xcr0;
-		asm volatile("xsaveopt64 %0" : : "m"(*silly), "a"(eax), "d"(edx));
+		asm volatile("xsave64 %0" : : "m"(*silly), "a"(eax), "d"(edx));
 	} else if (cpu_has_feat(CPU_FEAT_X86_XSAVE)) {
 		edx = x86_default_xcr0 >> 32;
 		eax = x86_default_xcr0;

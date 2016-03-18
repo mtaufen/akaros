@@ -618,7 +618,7 @@ void run_current_uthread(void)
 	assert(0);
 }
 
-/* Launches the uthread on the vcore.  Don't call this on current_uthread. 
+/* Launches the uthread on the vcore.  Don't call this on current_uthread.
  *
  * In previous versions of this, we used to check for events after setting
  * current_uthread.  That is super-dangerous.  handle_events() doesn't always
