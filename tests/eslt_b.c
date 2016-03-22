@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <parlib/uthread.h>
+#include <pthread.h>
 
 
 #define X87        (1 << 0)
@@ -551,7 +552,7 @@ void check_values(uint64_t xcr0) {
 }
 
 int main() {
-  uthread_mcp_init();
+  pthread_mcp_init();
   uint32_t edx = 0;
   uint32_t eax = 0;
   uint64_t xcr0 = 0;

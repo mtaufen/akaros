@@ -78,7 +78,7 @@ static void hex_dump(void *mem, uint64_t size) {
 
 }
 
-struct ancillary_state derpxero;
+
 struct ancillary_state custom_anc;
 
 static inline int as_cmp (const void *_a, const void *_b, size_t n) {
@@ -781,6 +781,7 @@ void run_uthread(struct uthread *uthread)
 	uthread->state = UT_RUNNING;
 	/* Save a ptr to the uthread we'll run in the transition context's TLS */
 	current_uthread = uthread;
+	printf("Uthread has fp saved (run_uthread)?: %d\n", current_uthread->flags & UTHREAD_FPSAVED);
 	if (uthread->flags & UTHREAD_FPSAVED) {
 		uthread->flags &= ~UTHREAD_FPSAVED;
 		afp(&uthread->as, __FILE__, __LINE__); // Probably expect this to fail the first time a uthread is run
@@ -809,6 +810,7 @@ static void __run_current_uthread_raw(void)
 	vcpd->notif_pending = TRUE;
 	assert(!(current_uthread->flags & UTHREAD_SAVED));
 
+	printf("Uthread has fp saved (run_current_uthread_raw)?: %d\n", current_uthread->flags & UTHREAD_FPSAVED);
        // XXX
        //assert(!(current_uthread->flags & UTHREAD_FPSAVED));
        /* feel like we might merge a bit with run_uth */
