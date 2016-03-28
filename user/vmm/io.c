@@ -1,4 +1,4 @@
-#include <stdio.h> 
+#include <stdio.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -31,7 +31,7 @@ struct pciconfig {
 
 /* just index by devfn, i.e. 8 bits */
 struct pciconfig pcibus[] = {
-	/* linux requires that devfn 0 be a bridge. 
+	/* linux requires that devfn 0 be a bridge.
 	 * 00:00.0 Host bridge: Intel Corporation 440BX/ZX/DX - 82443BX/ZX/DX Host bridge (rev 01)
 	 */
 	{
@@ -194,7 +194,18 @@ int io(struct guest_thread *vm_thread)
 		//printf("configread16 ");
 		return configread16(edx, &vm_tf->tf_rax);
 	}
-	printf("unknown IO %p %x %x\n", ip8, *ip8, *ip16);
+
+	// TODO: Hacky, started adding stuff to just skip PIT io here
+	// will probably have to skip input from the PIT too...
+	// if (*ip16 == 0xe640
+	// 	|| *ip16 == 0xe641
+	// 	|| *ip16 == 0xe642
+	// 	|| *ip16 == 0xe643) {
+	// 	return 0;
+	// }
+
+
+	printf("unknown IO %p %x %x %x\n", ip8, *ip8, *ip16, edx);
 	return -1;
 }
 
