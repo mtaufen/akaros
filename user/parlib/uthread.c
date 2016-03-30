@@ -343,8 +343,10 @@ void __attribute__((noreturn)) uthread_vcore_entry(void)
                save_fp_state(&current_uthread->as);
                current_uthread->flags |= UTHREAD_FPSAVED;
               save_fp_state(&custom_anc);
-              printf("Saved fp state (uthread_vcore_entry) at %s:%d\n", __FILE__, __LINE__);
+              printf("Saved fp state (uthread_vcore_entry, vcore_id(): %d) at %s:%d\n", vcore_id(), __FILE__, __LINE__);
        }
+
+     printf("in uthread_vcore_entry, vcore_id(): %d\n", vcore_id());
 
 	/* If someone is stealing our uthread (from when we were preempted before),
 	 * we can't touch our uthread.  But we might be the last vcore around, so
@@ -781,7 +783,7 @@ void run_uthread(struct uthread *uthread)
 	uthread->state = UT_RUNNING;
 	/* Save a ptr to the uthread we'll run in the transition context's TLS */
 	current_uthread = uthread;
-	printf("Uthread has fp saved (run_uthread)?: %d\n", current_uthread->flags & UTHREAD_FPSAVED);
+	printf("Uthread has fp saved (run_uthread, vcore_id(): %d)?: %d\n", vcore_id(), current_uthread->flags & UTHREAD_FPSAVED);
 	if (uthread->flags & UTHREAD_FPSAVED) {
 		uthread->flags &= ~UTHREAD_FPSAVED;
 		afp(&uthread->as, __FILE__, __LINE__); // Probably expect this to fail the first time a uthread is run
@@ -810,7 +812,7 @@ static void __run_current_uthread_raw(void)
 	vcpd->notif_pending = TRUE;
 	assert(!(current_uthread->flags & UTHREAD_SAVED));
 
-	printf("Uthread has fp saved (run_current_uthread_raw)?: %d\n", current_uthread->flags & UTHREAD_FPSAVED);
+	printf("Uthread has fp saved (run_current_uthread_raw, vcore_id(): %d)?: %d\n", vcore_id(), current_uthread->flags & UTHREAD_FPSAVED);
        // XXX
        //assert(!(current_uthread->flags & UTHREAD_FPSAVED));
        /* feel like we might merge a bit with run_uth */
