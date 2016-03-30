@@ -78,7 +78,7 @@ static void hex_dump(void *mem, uint64_t size) {
 
 }
 
-
+struct ancillary_state dat_as;
 struct ancillary_state custom_anc;
 
 static inline int as_cmp (const void *_a, const void *_b, size_t n) {
@@ -92,6 +92,15 @@ static inline int as_cmp (const void *_a, const void *_b, size_t n) {
   return 0;
 }
 
+static inline void pvcvmfp() {
+	uint8_t xmm0_cur[16];
+	char *ymm0  = "|____XMM:00____||_YMM_Hi128:00_|";
+
+ 	asm volatile ("movdqu %%xmm0, (%0)" : /* No Outputs */ : "r" (xmm0_cur) : "memory");
+	if (!as_cmp(xmm0_cur, ymm0, 16)) {
+		printf("fp state vcore: %d\n", vcore_id());
+	}
+}
 
 
 static inline void hdca(const char *file, int line) {
@@ -343,11 +352,11 @@ void __attribute__((noreturn)) uthread_vcore_entry(void)
                save_fp_state(&current_uthread->as);
                current_uthread->flags |= UTHREAD_FPSAVED;
               save_fp_state(&custom_anc);
-              printf("Saved fp state (uthread_vcore_entry, vcore_id(): %d) at %s:%d\n", vcore_id(), __FILE__, __LINE__);
+              printf("Saved fp state (uthread_vcore_entry, vcore_id(): %d, uthread: %p) at %s:%d\n", vcore_id(), current_uthread, __FILE__, __LINE__);
        }
 
-     printf("in uthread_vcore_entry, vcore_id(): %d\n", vcore_id());
-
+     printf("in uthread_vcore_entry, vcore_id(): %d, uthread: %p\n", vcore_id(), current_uthread); // Note: current_uthread could be null here
+     pvcvmfp();
 	/* If someone is stealing our uthread (from when we were preempted before),
 	 * we can't touch our uthread.  But we might be the last vcore around, so
 	 * we'll handle preemption events (spammed to our public mbox).
@@ -783,7 +792,7 @@ void run_uthread(struct uthread *uthread)
 	uthread->state = UT_RUNNING;
 	/* Save a ptr to the uthread we'll run in the transition context's TLS */
 	current_uthread = uthread;
-	printf("Uthread has fp saved (run_uthread, vcore_id(): %d)?: %d\n", vcore_id(), current_uthread->flags & UTHREAD_FPSAVED);
+	printf("Uthread has fp saved (run_uthread, vcore_id(): %d, uthread: %p)?: %d\n", vcore_id(), uthread, current_uthread->flags & UTHREAD_FPSAVED);
 	if (uthread->flags & UTHREAD_FPSAVED) {
 		uthread->flags &= ~UTHREAD_FPSAVED;
 		afp(&uthread->as, __FILE__, __LINE__); // Probably expect this to fail the first time a uthread is run
@@ -812,7 +821,7 @@ static void __run_current_uthread_raw(void)
 	vcpd->notif_pending = TRUE;
 	assert(!(current_uthread->flags & UTHREAD_SAVED));
 
-	printf("Uthread has fp saved (run_current_uthread_raw, vcore_id(): %d)?: %d\n", vcore_id(), current_uthread->flags & UTHREAD_FPSAVED);
+	printf("Uthread has fp saved (run_current_uthread_raw, vcore_id(): %d, uthread: %p)?: %d\n", vcore_id(), current_uthread, current_uthread->flags & UTHREAD_FPSAVED);
        // XXX
        //assert(!(current_uthread->flags & UTHREAD_FPSAVED));
        /* feel like we might merge a bit with run_uth */
