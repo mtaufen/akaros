@@ -973,11 +973,11 @@ void handle_vmexit(struct vm_trapframe *tf)
 
 	//save_fp_state(&vcpd->preempt_anc);
 	// save_fp_state(&custom_anc);
-	// char *pcustom_anc = (char *)&custom_anc;
-	// for (uint64_t i = 0; i < sizeof(struct ancillary_state); ++i) {
-	// 	pcustom_anc[i] = 0;
-	// }
-	// save_fp_state(&custom_anc);
+	char *pcustom_anc = (char *)&custom_anc;
+	for (uint64_t i = 0; i < sizeof(struct ancillary_state); ++i) {
+		pcustom_anc[i] = 0;
+	}
+	save_fp_state(&custom_anc);
 
 	// static struct ancillary_state fst;
 	// static struct ancillary_state snd;

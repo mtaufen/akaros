@@ -117,6 +117,8 @@ static inline uint64_t min(uint64_t a, uint64_t b) {
 extern void hd_vcpd();
 extern void hd_custom_anc();
 
+extern struct ancillary_state custom_anc;
+
 static void __attribute__((noreturn)) proc_pop_vmtf(struct vm_trapframe *tf)
 {
 	struct per_cpu_info *pcpui = &per_cpu_info[core_id()];
@@ -153,10 +155,10 @@ static void __attribute__((noreturn)) proc_pop_vmtf(struct vm_trapframe *tf)
 
 	// TODO restore fp state
 	//printk("proc_pop_vmtf\n");
-	hd_vcpd(__FILE__, __LINE__);
+	//hd_vcpd(__FILE__, __LINE__);
 
 	//restore_fp_state(&vcpd->preempt_anc);
-	// restore_fp_state(&custom_anc);
+	restore_fp_state(&custom_anc);
 
 	/* vmlaunch/resume can fail, so we need to be able to return from this.
 	 * Thus we can't clobber rsp via the popq style of setting the registers.
