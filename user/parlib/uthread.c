@@ -12,6 +12,69 @@
 #include <parlib/assert.h>
 #include <parlib/arch/trap.h>
 
+
+static inline void poison_fp_regs(void)
+{
+
+	char *mm0 = "*00^^^^*";
+	char *mm1 = "*01^^^^*";
+	char *mm2 = "*02^^^^*";
+	char *mm3 = "*03^^^^*";
+	char *mm4 = "*04^^^^*";
+	char *mm5 = "*05^^^^*";
+	char *mm6 = "*06^^^^*";
+	char *mm7 = "*07^^^^*";
+
+	char *ymm0  = "*00^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm1  = "*01^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm2  = "*02^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm3  = "*03^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm4  = "*04^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm5  = "*05^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm6  = "*06^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm7  = "*07^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm8  = "*08^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm9  = "*09^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm10 = "*10^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm11 = "*11^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm12 = "*12^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm13 = "*13^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm14 = "*14^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm15 = "*15^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+
+
+	asm volatile ("movq (%0), %%mm0" : /* No Outputs */ : "r" (mm0) : "%mm0");
+	asm volatile ("movq (%0), %%mm1" : /* No Outputs */ : "r" (mm1) : "%mm1");
+	asm volatile ("movq (%0), %%mm2" : /* No Outputs */ : "r" (mm2) : "%mm2");
+	asm volatile ("movq (%0), %%mm3" : /* No Outputs */ : "r" (mm3) : "%mm3");
+	asm volatile ("movq (%0), %%mm4" : /* No Outputs */ : "r" (mm4) : "%mm4");
+	asm volatile ("movq (%0), %%mm5" : /* No Outputs */ : "r" (mm5) : "%mm5");
+	asm volatile ("movq (%0), %%mm6" : /* No Outputs */ : "r" (mm6) : "%mm6");
+	asm volatile ("movq (%0), %%mm7" : /* No Outputs */ : "r" (mm7) : "%mm7");
+
+	asm volatile ("vmovdqu (%0), %%ymm0" : /* No Outputs */ : "r" (ymm0) : "%xmm0");
+    asm volatile ("vmovdqu (%0), %%ymm1" : /* No Outputs */ : "r" (ymm1) : "%xmm1");
+    asm volatile ("vmovdqu (%0), %%ymm2" : /* No Outputs */ : "r" (ymm2) : "%xmm2");
+    asm volatile ("vmovdqu (%0), %%ymm3" : /* No Outputs */ : "r" (ymm3) : "%xmm3");
+    asm volatile ("vmovdqu (%0), %%ymm4" : /* No Outputs */ : "r" (ymm4) : "%xmm4");
+    asm volatile ("vmovdqu (%0), %%ymm5" : /* No Outputs */ : "r" (ymm5) : "%xmm5");
+    asm volatile ("vmovdqu (%0), %%ymm6" : /* No Outputs */ : "r" (ymm6) : "%xmm6");
+    asm volatile ("vmovdqu (%0), %%ymm7" : /* No Outputs */ : "r" (ymm7) : "%xmm7");
+
+    asm volatile ("vmovdqu (%0), %%ymm8"  : /* No Outputs */ : "r" (ymm8)  : "%xmm8");
+    asm volatile ("vmovdqu (%0), %%ymm9"  : /* No Outputs */ : "r" (ymm9)  : "%xmm9");
+    asm volatile ("vmovdqu (%0), %%ymm10" : /* No Outputs */ : "r" (ymm10) : "%xmm10");
+    asm volatile ("vmovdqu (%0), %%ymm11" : /* No Outputs */ : "r" (ymm11) : "%xmm11");
+    asm volatile ("vmovdqu (%0), %%ymm12" : /* No Outputs */ : "r" (ymm12) : "%xmm12");
+    asm volatile ("vmovdqu (%0), %%ymm13" : /* No Outputs */ : "r" (ymm13) : "%xmm13");
+    asm volatile ("vmovdqu (%0), %%ymm14" : /* No Outputs */ : "r" (ymm14) : "%xmm14");
+    asm volatile ("vmovdqu (%0), %%ymm15" : /* No Outputs */ : "r" (ymm15) : "%xmm15");
+
+}
+
+
+
+
 /* SCPs have a default 2LS that only manages thread 0.  Any other 2LS, such as
  * pthreads, should override sched_ops in its init code. */
 extern struct schedule_ops thread0_2ls_ops;
@@ -428,6 +491,7 @@ void uthread_yield(bool save_state, void (*yield_func)(struct uthread*, void*),
 	if (save_state && (uthread->u_ctx.type != ROS_SW_CTX)) {
 		save_fp_state(&uthread->as);
 		uthread->flags |= UTHREAD_FPSAVED;
+poison_fp_regs();
 	}
 	/* Change to the transition context (both TLS (if applicable) and stack). */
 	if (__uthread_has_tls(uthread)) {
@@ -606,6 +670,7 @@ void run_current_uthread(void)
 		save_fp_state(&uth->as);
 		uth->state = UT_NOT_RUNNING;
 		uth->flags |= UTHREAD_SAVED | UTHREAD_FPSAVED;
+poison_fp_regs();
 		handle_refl_fault(uth, &vcpd->uthread_ctx);
 		/* we abort no matter what.  up to the 2LS to reschedule the thread */
 		set_stack_pointer((void*)vcpd->vcore_stack);
@@ -618,7 +683,7 @@ void run_current_uthread(void)
 	assert(0);
 }
 
-/* Launches the uthread on the vcore.  Don't call this on current_uthread. 
+/* Launches the uthread on the vcore.  Don't call this on current_uthread.
  *
  * In previous versions of this, we used to check for events after setting
  * current_uthread.  That is super-dangerous.  handle_events() doesn't always
@@ -746,6 +811,7 @@ static void copyout_uthread(struct preempt_data *vcpd, struct uthread *uthread,
 	else
 		uthread->as = vcpd->preempt_anc;
 	uthread->flags |= UTHREAD_FPSAVED;
+poison_fp_regs();
 }
 
 /* Helper, packages up and pauses a uthread that was running on vcoreid.  Used
