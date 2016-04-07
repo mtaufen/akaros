@@ -25,6 +25,7 @@
 #include <vmm/virtio_ids.h>
 #include <vmm/virtio_config.h>
 #include <vmm/sched.h>
+#include <ros/procinfo.h>
 
 struct vmctl vmctl;
 struct vmm_gpcore_init gpci;
@@ -837,6 +838,12 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
+
+
+
+	printf("THE DEFAULT XCR0 IS: 0x%x\n", __proc_global_info.x86_default_xcr0);
+
+
 	fprintf(stderr, "Run with %d cores and vmmflags 0x%x\n", nr_gpcs, vmmflags);
 	mcp = 1;
 	if (mcp) {
@@ -1102,6 +1109,9 @@ int main(int argc, char **argv)
 				break;
 			case EXIT_REASON_APIC_WRITE:
 				if (1 || debug)fprintf(stderr, "APIC WRITE EXIT\n");
+				break;
+			case EXIT_REASON_EXCEPTION_NMI: // nmi
+				printf("User mode handler\n%s", "");
 				break;
 			default:
 				fprintf(stderr, "Don't know how to handle exit %d\n",

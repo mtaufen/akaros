@@ -193,6 +193,7 @@ static inline void pop_sw_tf(struct sw_trapframe *sw_tf, uint32_t vcoreid)
  * (right before popping), right before calling this.  If notif_pending is not
  * clear, this will self_notify this core, since it should be because we missed
  * a notification message while notifs were disabled. */
+ ssize_t sys_cputs(const uint8_t *s, size_t len);
 static inline void pop_user_ctx(struct user_context *ctx, uint32_t vcoreid)
 {
 	switch (ctx->type) {
@@ -203,7 +204,9 @@ static inline void pop_user_ctx(struct user_context *ctx, uint32_t vcoreid)
 		pop_sw_tf(&ctx->tf.sw_tf, vcoreid);
 		break;
 	case ROS_VM_CTX:
+		ros_syscall(SYS_cputs, "Going to SYS_pop_ctx\n",  21, 0, 0, 0, 0);
 		ros_syscall(SYS_pop_ctx, ctx, 0, 0, 0, 0, 0);
+		ros_syscall(SYS_cputs, "Was it async?\n",  14, 0, 0, 0, 0);
 		break;
 	}
 	assert(0);
@@ -343,7 +346,7 @@ static inline void save_user_ctx_hw(struct user_context *ctx)
 	             "addq $0xa0, %%rsp;     " /* move to rsp slot */
 	             "popq %%rsp;            " /* restore saved/original rsp */
 	             "1:                     " /* where this tf will restart */
-	             : 
+	             :
 	             : "g"(&tf->tf_rsp), "g"(&tf->tf_rip), "g"(tf->tf_rax)
 	             : "rax", "memory", "cc");
 } __attribute__((always_inline, returns_twice))

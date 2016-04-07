@@ -13,6 +13,64 @@
 #include <parlib/arch/trap.h>
 
 
+static inline void poison_fp_regs(void)
+{
+
+	char *mm0 = "*00^^^^*";
+	char *mm1 = "*01^^^^*";
+	char *mm2 = "*02^^^^*";
+	char *mm3 = "*03^^^^*";
+	char *mm4 = "*04^^^^*";
+	char *mm5 = "*05^^^^*";
+	char *mm6 = "*06^^^^*";
+	char *mm7 = "*07^^^^*";
+
+	char *ymm0  = "*00^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm1  = "*01^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm2  = "*02^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm3  = "*03^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm4  = "*04^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm5  = "*05^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm6  = "*06^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm7  = "*07^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm8  = "*08^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm9  = "*09^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm10 = "*10^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm11 = "*11^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm12 = "*12^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm13 = "*13^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm14 = "*14^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+	char *ymm15 = "*15^^^^^^^^^^^^^^^^^^^^^^^^^^^^*";
+
+
+	asm volatile ("movq (%0), %%mm0" : /* No Outputs */ : "r" (mm0) : "%mm0");
+	asm volatile ("movq (%0), %%mm1" : /* No Outputs */ : "r" (mm1) : "%mm1");
+	asm volatile ("movq (%0), %%mm2" : /* No Outputs */ : "r" (mm2) : "%mm2");
+	asm volatile ("movq (%0), %%mm3" : /* No Outputs */ : "r" (mm3) : "%mm3");
+	asm volatile ("movq (%0), %%mm4" : /* No Outputs */ : "r" (mm4) : "%mm4");
+	asm volatile ("movq (%0), %%mm5" : /* No Outputs */ : "r" (mm5) : "%mm5");
+	asm volatile ("movq (%0), %%mm6" : /* No Outputs */ : "r" (mm6) : "%mm6");
+	asm volatile ("movq (%0), %%mm7" : /* No Outputs */ : "r" (mm7) : "%mm7");
+
+	asm volatile ("vmovdqu (%0), %%ymm0" : /* No Outputs */ : "r" (ymm0) : "%xmm0");
+    asm volatile ("vmovdqu (%0), %%ymm1" : /* No Outputs */ : "r" (ymm1) : "%xmm1");
+    asm volatile ("vmovdqu (%0), %%ymm2" : /* No Outputs */ : "r" (ymm2) : "%xmm2");
+    asm volatile ("vmovdqu (%0), %%ymm3" : /* No Outputs */ : "r" (ymm3) : "%xmm3");
+    asm volatile ("vmovdqu (%0), %%ymm4" : /* No Outputs */ : "r" (ymm4) : "%xmm4");
+    asm volatile ("vmovdqu (%0), %%ymm5" : /* No Outputs */ : "r" (ymm5) : "%xmm5");
+    asm volatile ("vmovdqu (%0), %%ymm6" : /* No Outputs */ : "r" (ymm6) : "%xmm6");
+    asm volatile ("vmovdqu (%0), %%ymm7" : /* No Outputs */ : "r" (ymm7) : "%xmm7");
+
+    asm volatile ("vmovdqu (%0), %%ymm8"  : /* No Outputs */ : "r" (ymm8)  : "%xmm8");
+    asm volatile ("vmovdqu (%0), %%ymm9"  : /* No Outputs */ : "r" (ymm9)  : "%xmm9");
+    asm volatile ("vmovdqu (%0), %%ymm10" : /* No Outputs */ : "r" (ymm10) : "%xmm10");
+    asm volatile ("vmovdqu (%0), %%ymm11" : /* No Outputs */ : "r" (ymm11) : "%xmm11");
+    asm volatile ("vmovdqu (%0), %%ymm12" : /* No Outputs */ : "r" (ymm12) : "%xmm12");
+    asm volatile ("vmovdqu (%0), %%ymm13" : /* No Outputs */ : "r" (ymm13) : "%xmm13");
+    asm volatile ("vmovdqu (%0), %%ymm14" : /* No Outputs */ : "r" (ymm14) : "%xmm14");
+    asm volatile ("vmovdqu (%0), %%ymm15" : /* No Outputs */ : "r" (ymm15) : "%xmm15");
+
+}
 
 
  static inline uint64_t min(uint64_t a, uint64_t b) {
@@ -36,22 +94,22 @@ static void hex_dump(void *mem, uint64_t size) {
 
 
     if (print_ascii) {
-      if ('\a' == *next)      { printf("\\a"); }
-      else if ('\b' == *next) { printf("\\b"); }
-      else if ('\f' == *next) { printf("\\f"); }
-      else if ('\n' == *next) { printf("\\n"); }
-      else if ('\r' == *next) { printf("\\r"); }
-      else if ('\t' == *next) { printf("\\t"); }
-      else if ('\v' == *next) { printf("\\v"); }
-      else if ('\\' == *next) { printf("\\ "); }
-      else if ('\'' == *next) { printf("\' "); }
-      else if ('\"' == *next) { printf("\" "); }
-      else if ('\?' == *next) { printf("\? "); }
+      if ('\a' == *next)      { sys_cputs("\\a", 1); }
+      else if ('\b' == *next) { sys_cputs("\\b", 1); }
+      else if ('\f' == *next) { sys_cputs("\\f", 1); }
+      else if ('\n' == *next) { sys_cputs("\\n", 1); }
+      else if ('\r' == *next) { sys_cputs("\\r", 1); }
+      else if ('\t' == *next) { sys_cputs("\\t", 1); }
+      else if ('\v' == *next) { sys_cputs("\\v", 1); }
+      else if ('\\' == *next) { sys_cputs("\\ ", 1); }
+      else if ('\'' == *next) { sys_cputs("\' ", 1); }
+      else if ('\"' == *next) { sys_cputs("\" ", 1); }
+      else if ('\?' == *next) { sys_cputs("\? ", 1); }
       else { printf("%c ", *next); }
     }
     else {
       // Print two bytes and a space
-      if (0x00 == *next) { printf("-- "); }
+      if (0x00 == *next) { sys_cputs("-- ", 3); }
       else               { printf("%02x ", *next); }
     }
     // Manipulate counters
@@ -63,7 +121,7 @@ static void hex_dump(void *mem, uint64_t size) {
       line_i = 0;
       if (print_ascii) { // we just printed the last ascii char of a line
         print_ascii = 0;
-        printf("\n");
+        sys_cputs("\n", 1);
       }
       else { // we just printed the last hex byte of a line
         print_ascii = 1;
@@ -74,12 +132,30 @@ static void hex_dump(void *mem, uint64_t size) {
     }
   }
 
-  printf("\n");
-
+  asm volatile ("nop;nop;nop;nop;");
+  sys_cputs("\n", 1);
+  asm volatile ("nop;nop;nop;nop;");
 }
 
 struct ancillary_state dat_as;
 struct ancillary_state custom_anc;
+
+char *xmms = "|____XMM:00____|"
+             "|____XMM:01____|"
+             "|____XMM:02____|"
+             "|____XMM:03____|"
+             "|____XMM:04____|"
+             "|____XMM:05____|"
+             "|____XMM:06____|"
+             "|____XMM:07____|"
+             "|____XMM:08____|"
+             "|____XMM:09____|"
+             "|____XMM:10____|"
+             "|____XMM:11____|"
+             "|____XMM:12____|"
+             "|____XMM:13____|"
+             "|____XMM:14____|"
+             "|____XMM:15____|";
 
 static inline int as_cmp (const void *_a, const void *_b, size_t n) {
   char *a = (char*)_a;
@@ -92,13 +168,17 @@ static inline int as_cmp (const void *_a, const void *_b, size_t n) {
   return 0;
 }
 
+static inline int check_xmms(struct ancillary_state *as) {
+	return as_cmp(&as->xmm0, xmms, 256);
+}
+
 static inline void pvcvmfp() {
 	uint8_t xmm0_cur[16];
 	char *ymm0  = "|____XMM:00____||_YMM_Hi128:00_|";
 
  	asm volatile ("movdqu %%xmm0, (%0)" : /* No Outputs */ : "r" (xmm0_cur) : "memory");
 	if (!as_cmp(xmm0_cur, ymm0, 16)) {
-		printf("fp state vcore: %d\n", vcore_id());
+		printf("fp state core: %d\n", vcore_id());
 	}
 }
 
@@ -109,7 +189,7 @@ static inline void hdca(const char *file, int line) {
 }
 
 static inline void afp(struct ancillary_state *as, const char *file, int line) {
-	printf("afp at: %s:%d\n", file, line);
+	// printf("afp at: %s:%d\n", file, line);
 		if (as_cmp(&custom_anc, as, 416)) { // only really need to cmp through xmms
 			printf("Ancillary state match fail at: %s:%d\n", file, line);
 		}
@@ -341,22 +421,35 @@ void __attribute__((constructor)) uthread_lib_init(void)
 /* 2LSs shouldn't call uthread_vcore_entry directly */
 void __attribute__((noreturn)) uthread_vcore_entry(void)
 {
+	static uint64_t duhhhh = 0;
 	uint32_t vcoreid = vcore_id();
 	struct preempt_data *vcpd = vcpd_of(vcoreid);
 	/* Should always have notifications disabled when coming in here. */
 	assert(!notif_is_enabled(vcoreid));
 	assert(in_vcore_context());
-
+++duhhhh;
        // XXX
        if (current_uthread && current_uthread->u_ctx.type != ROS_SW_CTX) {
                save_fp_state(&current_uthread->as);
                current_uthread->flags |= UTHREAD_FPSAVED;
               save_fp_state(&custom_anc);
-              printf("Saved fp state (uthread_vcore_entry, vcore_id(): %d, uthread: %p) at %s:%d\n", vcore_id(), current_uthread, __FILE__, __LINE__);
+              //printf("THE DEFAULT XCR0 IS: 0x%x\n", __proc_global_info.x86_default_xcr0);
+              printf("Saved fp state, uthread_vcore_entry, vcore_id: %d, uthread: %p\n", vcore_id(), current_uthread);
+              if (!check_xmms(&current_uthread->as)) {
+       				printf("saved-to contains test state uthread_vcore_entry, vcore_id: %d, uthread: %p\n", vcore_id(), current_uthread);
+       		  }
+       		  else if (current_uthread == 0x9813040 && duhhhh > 2050) { // vm thread is like /always/ this addr
+       		  	asm volatile ("nop;nop;nop;");
+       		  	printf("Going to hex dump the uthread silly state of the vm thread:\n%s", "");
+       		  	asm volatile ("nop;nop;nop;");
+       		  	//hex_dump(&current_uthread->as, 1024);
+       		  	asm volatile ("nop;nop;nop;");
+       		  	//poison_fp_regs();
+       		  }
        }
 
-     printf("in uthread_vcore_entry, vcore_id(): %d, uthread: %p\n", vcore_id(), current_uthread); // Note: current_uthread could be null here
-     pvcvmfp();
+     //printf("post-potential save in uthread_vcore_entry, vcore_id(): %d, uthread: %p\n", vcore_id(), current_uthread); // Note: current_uthread could be null here
+     // pvcvmfp();
 	/* If someone is stealing our uthread (from when we were preempted before),
 	 * we can't touch our uthread.  But we might be the last vcore around, so
 	 * we'll handle preemption events (spammed to our public mbox).
@@ -542,7 +635,7 @@ void uthread_yield(bool save_state, void (*yield_func)(struct uthread*, void*),
 	if (save_state && (uthread->u_ctx.type != ROS_SW_CTX)) {
 		save_fp_state(&uthread->as);
 		save_fp_state(&custom_anc);
-         printf("Saved fp state (uthread_yield) at %s:%d\n", __FILE__, __LINE__);
+          printf("Saved fp state (uthread_yield) at %s:%d\n", __FILE__, __LINE__);
 		uthread->flags |= UTHREAD_FPSAVED;
 	}
 	/* Change to the transition context (both TLS (if applicable) and stack). */
@@ -736,10 +829,16 @@ void run_current_uthread(void)
 		vcore_entry();
 	}
 
+ //printf("about to restore/pop, run_current_uthread, vcore_id: %d, uthread: %p\n", vcore_id(), current_uthread);
+
        /* feel like we might merge a bit with run_uth */
        if (current_uthread->flags & UTHREAD_FPSAVED) {
                current_uthread->flags &= ~UTHREAD_FPSAVED;
                afp(&current_uthread->as, __FILE__, __LINE__);
+               printf("about to restore fp state, run_current_uthread, vcore_id: %d, uthread: %p\n", vcore_id(), current_uthread);
+               if (!check_xmms(&current_uthread->as)) {
+               		printf("restore-from contains test state run_current_uthread, vcore_id: %d, uthread: %p\n", vcore_id(), current_uthread);
+               }
                restore_fp_state(&current_uthread->as);
        }
 
@@ -792,10 +891,26 @@ void run_uthread(struct uthread *uthread)
 	uthread->state = UT_RUNNING;
 	/* Save a ptr to the uthread we'll run in the transition context's TLS */
 	current_uthread = uthread;
-	printf("Uthread has fp saved (run_uthread, vcore_id(): %d, uthread: %p)?: %d\n", vcore_id(), uthread, current_uthread->flags & UTHREAD_FPSAVED);
+	// printf("Uthread has fp saved (run_uthread, vcore_id(): %d, uthread: %p)?: %d\n", vcore_id(), uthread, current_uthread->flags & UTHREAD_FPSAVED);
+	//printf("about to restore/pop, run_uthread, vcore_id: %d, uthread: %p\n", vcore_id(), uthread);
 	if (uthread->flags & UTHREAD_FPSAVED) {
 		uthread->flags &= ~UTHREAD_FPSAVED;
 		afp(&uthread->as, __FILE__, __LINE__); // Probably expect this to fail the first time a uthread is run
+		printf("about to restore fp state, run_uthread, vcore_id: %d, uthread: %p\n", vcore_id(), uthread);
+       if (!check_xmms(&uthread->as)) {
+       		printf("restore-from contains test state run_uthread, vcore_id: %d, uthread: %p\n", vcore_id(), current_uthread);
+       }
+       switch (uthread->u_ctx.type) {
+		case ROS_HW_CTX:
+       		printf("Context type is: %s\n", "ROS_HW_CTX");
+			break;
+		case ROS_SW_CTX:
+			printf("Context type is: %s\n", "ROS_SW_CTX");
+			break;
+		case ROS_VM_CTX:
+			printf("Context type is: %s\n", "ROS_VM_CTX");
+			break;
+		}
 		restore_fp_state(&uthread->as);
 	}
 	set_uthread_tls(uthread, vcoreid);
@@ -821,7 +936,7 @@ static void __run_current_uthread_raw(void)
 	vcpd->notif_pending = TRUE;
 	assert(!(current_uthread->flags & UTHREAD_SAVED));
 
-	printf("Uthread has fp saved (run_current_uthread_raw, vcore_id(): %d, uthread: %p)?: %d\n", vcore_id(), current_uthread, current_uthread->flags & UTHREAD_FPSAVED);
+	// printf("Uthread has fp saved (run_current_uthread_raw, vcore_id(): %d, uthread: %p)?: %d\n", vcore_id(), current_uthread, current_uthread->flags & UTHREAD_FPSAVED);
        // XXX
        //assert(!(current_uthread->flags & UTHREAD_FPSAVED));
        /* feel like we might merge a bit with run_uth */
@@ -902,13 +1017,13 @@ static void copyout_uthread(struct preempt_data *vcpd, struct uthread *uthread,
 	if (vcore_local){
 			save_fp_state(&uthread->as);
 				save_fp_state(&custom_anc);
-              printf("Saved fp state (copyout_uthread) at %s:%d\n", __FILE__, __LINE__);
+              // printf("Saved fp state (copyout_uthread) at %s:%d\n", __FILE__, __LINE__);
 		}
 	else
 		{
 			uthread->as = vcpd->preempt_anc;
 			custom_anc = vcpd->preempt_anc;
-              printf("Copied fp state from vcpd (copyout_uthread) at %s:%d\n", __FILE__, __LINE__);
+              // printf("Copied fp state from vcpd (copyout_uthread) at %s:%d\n", __FILE__, __LINE__);
 		}
 	uthread->flags |= UTHREAD_FPSAVED;
 }

@@ -32,6 +32,15 @@ pseudodesc_t idt_pd;
 struct irq_handler *irq_handlers[NUM_IRQS];
 spinlock_t irq_handler_wlock = SPINLOCK_INITIALIZER_IRQSAVE;
 
+int vmehdeb = 0;
+void vmehde() {
+	vmehdeb = 1;
+}
+
+void vmehdd() {
+	vmehdeb = 0;
+}
+
 static bool try_handle_exception_fixup(struct hw_trapframe *hw_tf)
 {
 	if (in_kernel(hw_tf)) {
@@ -347,6 +356,7 @@ static void trap_dispatch(struct hw_trapframe *hw_tf)
 
 			printk("Core %d is at %p (%s)\n", core_id(), get_hwtf_pc(hw_tf),
 			       fn_name);
+			printk("THIS IS trap_dispatch\n");
 			kfree(fn_name);
 			print_kmsgs(core_id());
 			pcpui->__lock_checking_enabled++;
@@ -485,6 +495,9 @@ void trap(struct hw_trapframe *hw_tf)
 		dec_ktrap_depth(pcpui);
 		return;
 	}
+
+	// if (vmehdeb) printk("About to call proc_restartcore() from trap(tf) on core: %d\n", core_id());
+	// if (vmehdeb) monitor(0);
 	proc_restartcore();
 	assert(0);
 }
@@ -566,6 +579,9 @@ void handle_irq(struct hw_trapframe *hw_tf)
 	 * to still be okay (might not be after blocking) */
 	if (in_kernel(hw_tf))
 		return;
+
+	// if (vmehdeb) printk("About to call proc_restartcore() from handle_irq(hw_tf) on core: %d\n", core_id());
+	// if (vmehdeb) monitor(0);
 	proc_restartcore();
 	assert(0);
 }
@@ -664,6 +680,9 @@ void sysenter_callwrapper(struct syscall *sysc, unsigned long count,
 	 * another core.  If you use pcpui again, you need to reread it. */
 	prep_syscalls(current, sysc, count);
 	disable_irq();
+
+	// if (vmehdeb) printk("About to call proc_restartcore() from sysenter_callwrapper(sysc=%u, count, sw_tf) on core: %d\n", sysc->num, core_id());
+	// if (vmehdeb) monitor(0);
 	proc_restartcore();
 }
 
@@ -723,7 +742,8 @@ static bool handle_vmexit_nmi(struct vm_trapframe *tf)
 		/* TODO: a backtrace of the guest would be nice here. */
 	}
 	printk("Core %d is at %p\n", core_id(), get_vmtf_pc(tf));
-	return TRUE;
+	printk("AM I HERE? I AM!\n");
+	return FALSE;
 }
 
 bool handle_vmexit_msr(struct vm_trapframe *tf)
@@ -931,14 +951,6 @@ void hex_dump(void *mem, uint64_t size) {
 
 struct ancillary_state custom_anc;
 
-int vmehdeb = 0;
-void vmehde() {
-	vmehdeb = 1;
-}
-
-void vmehdd() {
-	vmehdeb = 0;
-}
 
 void hd_vcpd(const char *file, int line) {
 	if (vmehdeb) {
@@ -1030,6 +1042,11 @@ void handle_vmexit(struct vm_trapframe *tf)
 	// 	printk("Hex duump of the saved thing (snd):\n");
 	// 	hex_dump(&snd, sizeof(struct ancillary_state));
 	// }
+	// extern struct ancillary_state custom_anc;
+	// restore_fp_state(&custom_anc);
+
+	// if (vmehdeb) printk("About to call proc_restartcore() from handle_vmexit(tf) on core: %d\n", core_id());
+	// if (vmehdeb) monitor(0);
 	proc_restartcore();
 }
 
