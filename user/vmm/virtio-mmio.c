@@ -19,6 +19,8 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+// TODO: Wtf so many headers, get rid of some
+
 #include <stdio.h>
 #include <sys/types.h>
 #include <pthread.h>
@@ -41,18 +43,22 @@
 #include <vmm/virtio_config.h>
 #include <vmm/sched.h>
 
-int debug_virtio_mmio = 0;
+ // TODO: Prune legacy register offsets
+
+ // TODO: Rewrite this to use the same terminology as the virtio spec
+
+int debug_virtio_mmio = 2;
 #define DPRINTF(fmt, ...) \
-	if (debug_virtio_mmio) { printf("virtio_mmio: " fmt , ## __VA_ARGS__); }
+	if (debug_virtio_mmio) { printf("virtio-mmio.c: " fmt , ## __VA_ARGS__); }
 
 
 #define VIRT_MAGIC 0x74726976 /* 'virt' */
-/* version is a real mess. A real mess. I don't understand it at all. Let's stick with 1, which sucks, 
- * instead of 2, which seems to be not supported right. I think.
- */
-#define VIRT_VERSION 1
-#define VIRT_VENDOR 0x554D4551 /* 'QEMU' */
 
+#define VIRT_VERSION 0x2
+
+#define VIRT_VENDOR 0x52414B41 /* 'AKAR' */
+
+// ah, shit, this is qemu stuff and looks like a legacy driver...
 
 typedef struct {
 	int state; // not used yet. */
@@ -62,7 +68,7 @@ typedef struct {
 	int qsel; // queue we are on.
 	int pagesize;
 	int page_shift;
-	int device_features_word; // if this is 1, use the high 32 bits. 
+	int device_features_word; // if this is 1, use the high 32 bits. (qemu called this the device_features_word, but I have a feeling it is actually the DEVICE_FEATURES_SEL)
 	int driver_features_word;
 	struct vqdev *vqdev;
 } mmiostate;
@@ -113,7 +119,7 @@ static uint32_t virtio_mmio_read(uint64_t gpa)
 
 	unsigned int offset = gpa - mmio.bar;
 	uint32_t low;
-	
+
 	DPRINTF("virtio_mmio_read offset %s 0x%x\n", virtio_names[offset],(int)offset);
 
 	/* If no backend is present, we treat most registers as
@@ -138,31 +144,16 @@ static uint32_t virtio_mmio_read(uint64_t gpa)
 	}
 
 
-    // WTF? Does this happen? 
+    // WTF? Does this happen?
+
+    // Mike: This is defined behavior. The driver should do this (the offset is the beginning of
+    // the config space, anything after that is config and size is device-specific)
     if (offset >= VIRTIO_MMIO_CONFIG) {
 	    fprintf(stderr, "Whoa. %p Reading past mmio config space? What gives?\n", gpa);
 	    return -1;
-#if 0
-	    offset -= VIRTIO_MMIO_CONFIG;
-	    switch (size) {
-	    case 1:
-		    return virtio_config_readb(vdev, offset);
-	    case 2:
-		    return virtio_config_readw(vdev, offset);
-	    case 4:
-		    return virtio_config_readl(vdev, offset);
-	    default:
-		    abort();
-	    }
-#endif
+
     }
 
-#if 0
-    if (size != 4) {
-        DPRINTF("wrong size access to register!\n");
-        return 0;
-    }
-#endif
     switch (offset) {
     case VIRTIO_MMIO_MAGIC_VALUE:
 	    return VIRT_MAGIC;
@@ -173,8 +164,9 @@ static uint32_t virtio_mmio_read(uint64_t gpa)
     case VIRTIO_MMIO_VENDOR_ID:
 	    return VIRT_VENDOR;
     case VIRTIO_MMIO_DEVICE_FEATURES:
+    printf("virtio device givin' da featurez!\n");
 	low = mmio.vqdev->device_features >> ((mmio.device_features_word) ? 32 : 0);
-	DPRINTF("RETURN from 0x%x 32 bits of word %s : 0x%x \n", mmio.vqdev->device_features, 
+	DPRINTF("RETURN from 0x%x 32 bits of word %s : 0x%x \n", mmio.vqdev->device_features,
 				mmio.device_features_word ? "high" : "low", low);
 	    return low;
     case VIRTIO_MMIO_QUEUE_NUM_MAX:
@@ -183,7 +175,7 @@ static uint32_t virtio_mmio_read(uint64_t gpa)
     case VIRTIO_MMIO_QUEUE_PFN:
 	    return mmio.vqdev->vqs[mmio.qsel].pfn;
     case VIRTIO_MMIO_INTERRUPT_STATUS:
-		// pretty sure this is per-mmio, not per-q. 
+		// pretty sure this is per-mmio, not per-q.
 	//fprintf(stderr, "MMIO ISR 0x%08x\n", mmio.isr);
 	//fprintf(stderr, "GPA IS 0x%016x\n", gpa);
 	//fprintf(stderr, "mmio.bar IS 0x%016x\n", mmio.bar);
@@ -214,7 +206,7 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
 	uint64_t val64;
 	uint32_t low, high;
 	unsigned int offset = gpa - mmio.bar;
-	
+
 	DPRINTF("virtio_mmio_write offset %s 0x%x value 0x%x\n", virtio_names[offset], (int)offset, value);
 
     if (offset >= VIRTIO_MMIO_CONFIG) {
@@ -247,7 +239,7 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
     case VIRTIO_MMIO_DEVICE_FEATURES_SEL:
         mmio.device_features_word = value;
         break;
-    case VIRTIO_MMIO_DEVICE_FEATURES:
+    case VIRTIO_MMIO_DEVICE_FEATURES: // TODO: Shouldn't have this here. This is a read only reg.
 	if (mmio.device_features_word) {
 	    /* changing the high word. */
 	    low = mmio.vqdev->device_features;
@@ -302,7 +294,7 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
 		    struct virtio_threadarg *va = malloc(sizeof(*va));
 		    va->arg = &mmio.vqdev->vqs[mmio.qsel];
 
-		    va->arg->virtio = vring_new_virtqueue(mmio.qsel, 
+		    va->arg->virtio = vring_new_virtqueue(mmio.qsel,
 							  mmio.vqdev->vqs[mmio.qsel].qnum,
 							  mmio.vqdev->vqs[mmio.qsel].qalign,
 							  false, // weak_barriers
@@ -315,7 +307,7 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
 			    perror("pth_create");
 		    }
         break;
-    case VIRTIO_MMIO_QUEUE_NOTIFY:
+    case VIRTIO_MMIO_QUEUE_NOTIFY: // TODO: (Mike) Why are we setting the qsel here? That's a different register.
 	    if (value < mmio.vqdev->numvqs) {
 		    mmio.qsel = value;
 	    }
@@ -344,13 +336,13 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
 	    mmio.vqdev->vqs[mmio.qsel].qdesc = val64;
 	    DPRINTF("qdesc set low result 0xx%x\n", val64);
 	    break;
-	    
+
     case VIRTIO_MMIO_QUEUE_DESC_HIGH:
 	    val64 = (uint32_t) mmio.vqdev->vqs[mmio.qsel].qdesc;
 	    mmio.vqdev->vqs[mmio.qsel].qdesc = (((uint64_t) value) <<32) | val64;
 	    DPRINTF("qdesc set high result 0xx%x\n", mmio.vqdev->vqs[mmio.qsel].qdesc);
 	    break;
-	    
+
 /* Selected queue's Available Ring address, 64 bits in two halves */
     case VIRTIO_MMIO_QUEUE_AVAIL_LOW:
 	    val64 = mmio.vqdev->vqs[mmio.qsel].qavail;
@@ -364,7 +356,7 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
 	    mmio.vqdev->vqs[mmio.qsel].qavail = (((uint64_t) value) <<32) | val64;
 	    DPRINTF("qavail set high result 0xx%x\n", mmio.vqdev->vqs[mmio.qsel].qavail);
 	    break;
-	    
+
 /* Selected queue's Used Ring address, 64 bits in two halves */
     case VIRTIO_MMIO_QUEUE_USED_LOW:
 	    val64 = mmio.vqdev->vqs[mmio.qsel].qused;
@@ -378,8 +370,8 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
 	    mmio.vqdev->vqs[mmio.qsel].qused = (((uint64_t) value) <<32) | val64;
 	    DPRINTF("qused set used result 0xx%x\n", mmio.vqdev->vqs[mmio.qsel].qused);
 	    break;
-	    
-	// for v2. 
+
+	// for v2.
     case VIRTIO_MMIO_QUEUE_READY:
 	    if (value) {
 		    // let's kick off the thread and see how it goes?
@@ -410,22 +402,32 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
 
 }
 
-void virtio_mmio_set_vring_irq(void)
-{
-	mmio.isr |= VIRTIO_MMIO_INT_VRING;
-}
+// void virtio_mmio_set_vring_irq(void)
+// {
+// 	mmio.isr |= VIRTIO_MMIO_INT_VRING;
+// }
 
 int virtio_mmio(struct guest_thread *vm_thread, uint64_t gpa, int destreg,
                 uint64_t *regp, int store)
 {
 	if (store) {
 		virtio_mmio_write(gpa, *regp);
-		DPRINTF("Write: mov %s to %s @%p val %p\n", regname(destreg),
+		DPRINTF("virtio_mmio: wrIte: mov %s to %s @%p val %p\n", regname(destreg),
 		        virtio_names[(uint8_t)gpa], gpa, *regp);
 	} else {
 		*regp = virtio_mmio_read(gpa);
-		DPRINTF("Read: Set %s from %s @%p to %p\n", regname(destreg),
+		DPRINTF("virtio_mmio: rEad: Set %s from %s @%p to %p\n", regname(destreg),
 		        virtio_names[(uint8_t)gpa], gpa, *regp);
 	}
 
 }
+
+
+/*
+Stuff you need to implement a virtio device with version 2:
+
+
+
+
+
+*/
