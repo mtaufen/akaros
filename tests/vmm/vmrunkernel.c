@@ -356,7 +356,9 @@ void *timer_thread(void *arg)
 	fprintf(stderr, "SENDING TIMER\n");
 }
 
-void *consout(void *arg)
+int debug_cons = 1;
+
+void *consout(void *arg) // cons -> vmrunkernel
 {
 	char *line, *consline, *outline;
 	static struct scatterlist out[] = { {NULL, sizeof(outline)}, };
@@ -371,7 +373,7 @@ void *consout(void *arg)
 	int i;
 	int num;
 
-	if (debug) {
+	if (debug_cons) {
 		fprintf(stderr, "----------------------- TT a %p\n", a);
 		fprintf(stderr, "talk thread ttargs %x v %x\n", a, v);
 	}
@@ -380,33 +382,33 @@ void *consout(void *arg)
 		//int debug = 1;
 		/* host: use any buffers we should have been sent. */
 		head = wait_for_vq_desc(v, iov, &outlen, &inlen);
-		if (debug)
+		if (debug_cons)
 			fprintf(stderr, "CCC: vq desc head %d, gaveit %d gotitback %d\n", head, gaveit, gotitback);
-		for(i = 0; debug && i < outlen + inlen; i++)
+		for(i = 0; debug_cons && i < outlen + inlen; i++)
 			fprintf(stderr, "CCC: v[%d/%d] v %p len %d\n", i, outlen + inlen, iov[i].v, iov[i].length);
 		/* host: if we got an output buffer, just output it. */
 		for(i = 0; i < outlen; i++) {
 			num++;
 			int j;
-			if (debug) {
+			if (debug_cons) {
 				fprintf(stderr, "CCC: IOV length is %d\n", iov[i].length);
 			}
 			for (j = 0; j < iov[i].length; j++)
 				printf("%c", ((char *)iov[i].v)[j]);
 		}
 		fflush(stdout);
-		if (debug)
+		if (debug_cons)
 			fprintf(stderr, "CCC: outlen is %d; inlen is %d\n", outlen, inlen);
 		/* host: fill in the writeable buffers. */
 		/* why we're getting these I don't know. */
 		for (i = outlen; i < outlen + inlen; i++) {
-			if (debug) fprintf(stderr, "CCC: send back empty writeable");
+			if (debug_cons) fprintf(stderr, "CCC: send back empty writeable");
 			iov[i].length = 0;
 		}
-		if (debug) fprintf(stderr, "CCC: call add_used\n");
+		if (debug_cons) fprintf(stderr, "CCC: call add_used\n");
 		/* host: now ack that we used them all. */
 		add_used(v, head, outlen+inlen);
-		if (debug) fprintf(stderr, "CCC: DONE call add_used\n");
+		if (debug_cons) fprintf(stderr, "CCC: DONE call add_used\n");
 	}
 	fprintf(stderr, "All done\n");
 	return NULL;
@@ -415,7 +417,7 @@ void *consout(void *arg)
 // FIXME.
 volatile int consdata = 0;
 
-void *consin(void *arg)
+void *consin(void *arg) // vmrunkernel -> cons
 {
 	struct virtio_threadarg *a = arg;
 	char *line, *outline;
@@ -433,17 +435,17 @@ void *consin(void *arg)
 	int num;
 	//char c[1];
 
-	if (debug) fprintf(stderr, "Spin on console being read, print num queues, halt\n");
+	if (debug_cons) fprintf(stderr, "Spin on console being read, print num queues, halt\n");
 
 	for(num = 0;! quit;num++) {
 		//int debug = 1;
 		/* host: use any buffers we should have been sent. */
 		head = wait_for_vq_desc(v, iov, &outlen, &inlen);
-		if (debug)
+		if (debug_cons)
 			fprintf(stderr, "vq desc head %d, gaveit %d gotitback %d\n", head, gaveit, gotitback);
-		for(i = 0; debug && i < outlen + inlen; i++)
+		for(i = 0; debug_cons && i < outlen + inlen; i++)
 			fprintf(stderr, "v[%d/%d] v %p len %d\n", i, outlen + inlen, iov[i].v, iov[i].length);
-		if (debug)
+		if (debug_cons)
 			fprintf(stderr, "outlen is %d; inlen is %d\n", outlen, inlen);
 		/* host: fill in the writeable buffers. */
 		for (i = outlen; i < outlen + inlen; i++) {
@@ -452,8 +454,8 @@ void *consin(void *arg)
 			if (read(0, consline, 1) < 0) {
 				exit(0);
 			}
-			if (debug) fprintf(stderr, "CONSIN: GOT A LINE:%s:\n", consline);
-			if (debug) fprintf(stderr, "CONSIN: OUTLEN:%d:\n", outlen);
+			if (debug_cons) fprintf(stderr, "CONSIN: GOT A LINE:%s:\n", consline);
+			if (debug_cons) fprintf(stderr, "CONSIN: OUTLEN:%d:\n", outlen);
 			if (strlen(consline) < 3 && consline[0] == 'q' ) {
 				quit = 1;
 				break;
@@ -462,12 +464,12 @@ void *consin(void *arg)
 			memmove(iov[i].v, consline, strlen(consline)+ 1);
 			iov[i].length = strlen(consline) + 1;
 		}
-		if (debug) fprintf(stderr, "call add_used\n");
+		if (debug_cons) fprintf(stderr, "call add_used\n");
 		/* host: now ack that we used them all. */
 		add_used(v, head, outlen+inlen);
 		/* turn off consdata - the IRQ injection isn't right */
 		//consdata = 1;
-		if (debug) fprintf(stderr, "DONE call add_used\n");
+		if (debug_cons) fprintf(stderr, "DONE call add_used\n");
 
 		// Send spurious for testing (Gan)
 		set_posted_interrupt(0xE5);
@@ -479,15 +481,43 @@ void *consin(void *arg)
 	return NULL;
 }
 
-static struct vqdev vqdev= {
-name: "console",
-dev: VIRTIO_ID_CONSOLE,
-device_features: 0, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
-numvqs: 2,
-vqs: {
-		{name: "consin", maxqnum: 64, f: consin, arg: (void *)0},
-		{name: "consout", maxqnum: 64, f: consout, arg: (void *)0},
-	}
+static struct vqdev vq_cons_dev = {
+	name: "console",
+	dev: VIRTIO_ID_CONSOLE,
+	device_features: VIRTIO_F_VERSION_1, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
+	numvqs: 2,
+	vqs: {
+			{name: "consin", maxqnum: 64, f: consin, arg: (void *)0},
+			{name: "consout", maxqnum: 64, f: consout, arg: (void *)0},
+		}
+};
+
+
+// Recieve thread (not sure whether it's "vm is recving" or "vmm is recving" yet)
+void * netrecv(void *arg)
+{
+	return NULL;
+}
+
+
+// Send thread (not sure whether it's "vm is sending" or "vmm is sending" yet)
+void * netsend(void *arg)
+{
+	return NULL;
+}
+
+// ^ since the queues will have the same names in the vm and the host we'll just
+// make the functions have the same name too.
+
+static struct vqdev vq_net_dev = {
+	name: "net",
+	dev: VIRTIO_ID_NET,
+	device_features: VIRTIO_F_VERSION_1,
+	numvqs: 2,
+	vqs: {
+			{name: "netrecv", maxqnum: 64, f: netrecv, arg: (void *)0},
+			{name: "netsend", maxqnum: 64, f: netsend, arg: (void *)0},
+		}
 };
 
 void lowmem() {
@@ -895,7 +925,7 @@ int main(int argc, char **argv)
 	vmctl.regs.tf_rsi = (uint64_t) bp;
 	if (mcp) {
 		/* set up virtio bits, which depend on threads being enabled. */
-		register_virtio_mmio(&vqdev, virtio_mmio_base);
+		register_virtio_mmio(&vq_cons_dev, virtio_mmio_base);
 	}
 	fprintf(stderr, "threads started\n");
 	fprintf(stderr, "Writing command :%s:\n", cmd);
@@ -1015,6 +1045,7 @@ int main(int argc, char **argv)
 				//vmctl.command = REG_ALL;
 				break;
 			case EXIT_REASON_INTERRUPT_WINDOW:
+				printf("does this ever happen?\n");
 				if (consdata) {
 					if (debug) fprintf(stderr, "inject an interrupt\n");
 					virtio_mmio_set_vring_irq();
