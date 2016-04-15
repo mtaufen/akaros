@@ -19,6 +19,8 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+// TODO: Wtf so many headers, get rid of some
+
 #include <stdio.h>
 #include <sys/types.h>
 #include <pthread.h>
@@ -41,17 +43,20 @@
 #include <vmm/virtio_config.h>
 #include <vmm/sched.h>
 
-int debug_virtio_mmio = 0;
+ // TODO: Prune legacy register offsets
+
+ // TODO: Rewrite this to use the same terminology as the virtio spec
+
+int debug_virtio_mmio = 2;
 #define DPRINTF(fmt, ...) \
-	if (debug_virtio_mmio) { printf("virtio_mmio: " fmt , ## __VA_ARGS__); }
+	if (debug_virtio_mmio) { printf("virtio-mmio.c: " fmt , ## __VA_ARGS__); }
 
 
 #define VIRT_MAGIC 0x74726976 /* 'virt' */
-/* version is a real mess. A real mess. I don't understand it at all. Let's stick with 1, which sucks,
- * instead of 2, which seems to be not supported right. I think.
- */
+
 #define VIRT_VERSION 0x2
-#define VIRT_VENDOR 0x554D4551 /* 'QEMU' */
+
+#define VIRT_VENDOR 0x52414B41 /* 'AKAR' */
 
 // ah, shit, this is qemu stuff and looks like a legacy driver...
 
@@ -63,8 +68,8 @@ typedef struct {
 	int qsel; // queue we are on.
 	int pagesize;
 	int page_shift;
-	uint32_t device_features_word; // if this is 1, use the high 32 bits.
-	uint32_t driver_features_word;
+	int device_features_word; // if this is 1, use the high 32 bits. (qemu called this the device_features_word, but I have a feeling it is actually the DEVICE_FEATURES_SEL)
+	int driver_features_word;
 	struct vqdev *vqdev;
 } mmiostate;
 
@@ -140,30 +145,15 @@ static uint32_t virtio_mmio_read(uint64_t gpa)
 
 
     // WTF? Does this happen?
+
+    // Mike: This is defined behavior. The driver should do this (the offset is the beginning of
+    // the config space, anything after that is config and size is device-specific)
     if (offset >= VIRTIO_MMIO_CONFIG) {
 	    fprintf(stderr, "Whoa. %p Reading past mmio config space? What gives?\n", gpa);
 	    return -1;
-#if 0
-	    offset -= VIRTIO_MMIO_CONFIG;
-	    switch (size) {
-	    case 1:
-		    return virtio_config_readb(vdev, offset);
-	    case 2:
-		    return virtio_config_readw(vdev, offset);
-	    case 4:
-		    return virtio_config_readl(vdev, offset);
-	    default:
-		    abort();
-	    }
-#endif
+
     }
 
-#if 0
-    if (size != 4) {
-        DPRINTF("wrong size access to register!\n");
-        return 0;
-    }
-#endif
     switch (offset) {
     case VIRTIO_MMIO_MAGIC_VALUE:
 	    return VIRT_MAGIC;
@@ -174,6 +164,7 @@ static uint32_t virtio_mmio_read(uint64_t gpa)
     case VIRTIO_MMIO_VENDOR_ID:
 	    return VIRT_VENDOR;
     case VIRTIO_MMIO_DEVICE_FEATURES:
+    printf("virtio device givin' da featurez!\n");
 	low = mmio.vqdev->device_features >> ((mmio.device_features_word) ? 32 : 0);
 	DPRINTF("RETURN from 0x%x 32 bits of word %s : 0x%x \n", mmio.vqdev->device_features,
 				mmio.device_features_word ? "high" : "low", low);
@@ -421,12 +412,22 @@ int virtio_mmio(struct guest_thread *vm_thread, uint64_t gpa, int destreg,
 {
 	if (store) {
 		virtio_mmio_write(gpa, *regp);
-		DPRINTF("Write: mov %s to %s @%p val %p\n", regname(destreg),
+		DPRINTF("virtio_mmio: wrIte: mov %s to %s @%p val %p\n", regname(destreg),
 		        virtio_names[(uint8_t)gpa], gpa, *regp);
 	} else {
 		*regp = virtio_mmio_read(gpa);
-		DPRINTF("Read: Set %s from %s @%p to %p\n", regname(destreg),
+		DPRINTF("virtio_mmio: rEad: Set %s from %s @%p to %p\n", regname(destreg),
 		        virtio_names[(uint8_t)gpa], gpa, *regp);
 	}
 
 }
+
+
+/*
+Stuff you need to implement a virtio device with version 2:
+
+
+
+
+
+*/

@@ -484,7 +484,7 @@ void *consin(void *arg) // vmrunkernel -> cons
 static struct vqdev vq_cons_dev = {
 	name: "console",
 	dev: VIRTIO_ID_CONSOLE,
-	device_features: VIRTIO_F_VERSION_1, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
+	device_features: (uint64_t)1 << VIRTIO_F_VERSION_1, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
 	numvqs: 2,
 	vqs: {
 			{name: "consin", maxqnum: 64, f: consin, arg: (void *)0},

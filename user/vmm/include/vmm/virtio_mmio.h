@@ -145,8 +145,8 @@ struct vq {
 	char *name;
 	void *(*f)(void *arg); // Start this as a thread when a matching virtio is discovered.
 	void *arg;
-	int maxqnum; // how many things the q gets? or something. 
-	int qnum; 
+	int maxqnum; // how many things the q gets? or something.
+	int qnum;
 	int qalign;
 	pthread_t thread;
 	/* filled in by virtio probing. */
@@ -165,10 +165,12 @@ struct vqdev {
 	/* Set up usually as a static initializer */
 	char *name;
 	uint32_t dev; // e.g. VIRTIO_ID_CONSOLE);
-	uint64_t device_features, driver_features;
+	uint64_t device_features;
+	uint64_t driver_features;
 	int numvqs;
 	struct vq vqs[];
 };
+
 
 
 /* This struct is passed to a virtio thread when it is started. It includes
@@ -178,8 +180,41 @@ struct virtio_threadarg {
 	struct vq *arg;
 };
 
+// The mmio device that wraps the vqdev. Holds things like the base
+// address of the device, the device status register, queue selectors, etc.
+// TODO: Remove fields that I just shim out or don't need, or that are already on the vqdev
+// this is a NON LEGACY DEVICE!
+struct virtio_mmio_dev {
+	uint32_t device_features_sel;
+	uint32_t driver_features_sel;
+	uint32_t queue_sel; // is this actually 32 bits? definitely not any bigger in the spec (next offest 4 bytes away)
+	// Stuff like queue num max, etc is on the vq.
+	// TODO: Change some of the names on the vq so that they match the virtio spec
+	uint32_t int_status; // InterruptStatus
+
+
+	// TODO: What to do about the device-specific configuration space?
+}
+
+
+// gpa is guest physical address
+// these are my "version 2" functions
+void virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa);
+void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value);
+void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev);
+
+// better name for this.... it sets the vqdev pointer on the virtio_mmio_dev
+// this function does two tiny things... basically unnecessary
+// would it be a good hook for "I plugged this thing in" though?
+void virtio_mmio_register_vqdev(struct virtio_mmio_dev *mmio_dev, struct vqdev *vqdev, uint64_t mmio_ba);
+
+
+
 void dumpvirtio_mmio(FILE *f, uint64_t gpa);
 void register_virtio_mmio(struct vqdev *v, uint64_t virtio_base);
 int virtio_mmio(struct guest_thread *vm_thread, uint64_t gpa, int destreg,
                 uint64_t *regp, int store);
 void virtio_mmio_set_vring_irq(void);
+
+
+// Mike: This file is from Linux. Ok.
