@@ -239,7 +239,7 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
     case VIRTIO_MMIO_DEVICE_FEATURES_SEL:
         mmio.device_features_word = value;
         break;
-    case VIRTIO_MMIO_DEVICE_FEATURES:
+    case VIRTIO_MMIO_DEVICE_FEATURES: // TODO: Shouldn't have this here. This is a read only reg.
 	if (mmio.device_features_word) {
 	    /* changing the high word. */
 	    low = mmio.vqdev->device_features;

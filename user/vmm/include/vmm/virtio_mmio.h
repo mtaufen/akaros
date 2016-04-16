@@ -151,12 +151,15 @@ struct vq {
 	pthread_t thread;
 	/* filled in by virtio probing. */
 	uint64_t pfn;
-	uint32_t isr; // not used yet but ...
+	uint32_t isr; // not used yet but ... // TODO: If it's not used then what is it!?
 	uint32_t status;
 	uint64_t qdesc;
 	uint64_t qavail;
 	uint64_t qused;
 	void *virtio;
+
+	uint32_t qready;
+
 };
 
 // a vqdev has a name; magic number; features ( we MUST have features);
@@ -185,21 +188,25 @@ struct virtio_threadarg {
 // TODO: Remove fields that I just shim out or don't need, or that are already on the vqdev
 // this is a NON LEGACY DEVICE!
 struct virtio_mmio_dev {
+	uint64_t base_address;
+
 	uint32_t device_features_sel;
 	uint32_t driver_features_sel;
 	uint32_t queue_sel; // is this actually 32 bits? definitely not any bigger in the spec (next offest 4 bytes away)
 	// Stuff like queue num max, etc is on the vq.
 	// TODO: Change some of the names on the vq so that they match the virtio spec
 	uint32_t int_status; // InterruptStatus
+	uint32_t status; // Status
+	uint32_t cfg_gen; //ConfigGeneration, used to check that access to device-specific config space was atomic
 
-
+	struct vqdev *vqdev;
 	// TODO: What to do about the device-specific configuration space?
-}
+};
 
 
 // gpa is guest physical address
 // these are my "version 2" functions
-void virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa);
+uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa);
 void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value);
 void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev);
 
