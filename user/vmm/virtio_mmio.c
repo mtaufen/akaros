@@ -1,4 +1,5 @@
-// Mike's implementation of virtio mmio device
+// Mike's implementation of virtio mmio device.
+// Mike's additions are Copyright (c) 2016 Google, Inc.
 
 // Partially based on the qemu implementation (although that was for the legacy spec)
 // That implementation was licensed as:
@@ -230,11 +231,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			break;
 
 		case VIRTIO_MMIO_DRIVER_FEATURES: // TODO: Test this one, make sure it works right
-			if (mmio_dev->device_features_sel) { // write to high 32 bits
-				mmio_dev->vqdev->device_features = ((uint64_t)(*value) << 32)
-				                                 | (0xffffffff & mmio_dev->device_features);
+			if (mmio_dev->driver_features_sel) { // write to high 32 bits
+				mmio_dev->vqdev->driver_features = ((uint64_t)(*value) << 32)
+				                                 | (0xffffffff & mmio_dev->driver_features);
 			} else { // write to the low 32 bits
-				mmio_dev->vqdev->device_features = (~0xffffffffULL & mmio_dev->device_features)
+				mmio_dev->vqdev->driver_features = (~0xffffffffULL & mmio_dev->driver_features)
 				                                 | *value;
 			}
 			break;
@@ -263,12 +264,21 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			break;
 
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
+		// TODO: Ron was just setting the qsel here... is that the right thing?
+		//       The spec is pretty clear that qsel is a different register than this.
+		// TODO: Bounds check the value against numvqs, obviously
 			break;
 
 		case VIRTIO_MMIO_INTERRUPT_ACK:
+		// TODO: It seems like you are supposed to write the same value as in int_status
+		//       here to indicate the event causing the interrupt was handled
+		// TODO: Ron was just doing mmio.isr & ~value, which would clear the isr register,
+		//       if you wrote the right thing... if you didn't you'd have a really messed
+		//       up looking interrupt in there...
 			break;
 
 		case VIRTIO_MMIO_STATUS:
+		// TODO: Ron was doing mmio.status |= value & 0xff;
 			break;
 
 		case VIRTIO_MMIO_QUEUE_DESC_LOW:

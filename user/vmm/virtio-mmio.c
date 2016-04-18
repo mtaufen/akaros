@@ -307,7 +307,7 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
 			    perror("pth_create");
 		    }
         break;
-    case VIRTIO_MMIO_QUEUE_NOTIFY:
+    case VIRTIO_MMIO_QUEUE_NOTIFY: // TODO: (Mike) Why are we setting the qsel here? That's a different register.
 	    if (value < mmio.vqdev->numvqs) {
 		    mmio.qsel = value;
 	    }
