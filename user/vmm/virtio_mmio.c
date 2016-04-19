@@ -38,6 +38,13 @@
 // Just need to implement read, write, and set irq,
  // maybe register_virtio_mmio... but that's pretty trivial (2 lines)
 
+static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
+{
+	// TODO: Actually reset the device!
+}
+
+
+// TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
 
 // Reads are ALWAYS 32 bit at a time
 uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
@@ -45,6 +52,8 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 	uint64_t offset = gpa - mmio_dev->base_address;
 
 	// TODO: Are there any more static fields to return here in a non-legacy device?
+	// TODO: Is there a use case where you would want to read registers from the
+	//       mmio_dev that would make sense even if vqdev.numvqs == 0?
 /*	If there is no vqdev registered with this mmio device,
 	or if there are no vqs on the device, we
 	return all registers as 0 except for the virtio magic
@@ -210,6 +219,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 {
 	uint64_t offset = gpa - mmio_dev->base_address;
 
+	if (!mmio_dev->vqdev) {
+		// If there is no vqdev on the mmio_dev, we just make all registers write-ignored.
+		// TODO: Is there a case where we want to provide an mmio transport with no vqdev backend?
+		return;
+	}
+
 	if (offset >= VIRTIO_MMIO_CONFIG) {
 		// TODO: Figure out what to do for writing the device config space
 		// TODO: Will also probably have to set the ConfigGeneration stuff
@@ -231,12 +246,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			break;
 
 		case VIRTIO_MMIO_DRIVER_FEATURES: // TODO: Test this one, make sure it works right
-			if (mmio_dev->driver_features_sel) { // write to high 32 bits
-				mmio_dev->vqdev->driver_features = ((uint64_t)(*value) << 32)
-				                                 | (0xffffffff & mmio_dev->driver_features);
-			} else { // write to the low 32 bits
-				mmio_dev->vqdev->driver_features = (~0xffffffffULL & mmio_dev->driver_features)
-				                                 | *value;
+			if (mmio_dev->driver_features_sel) {
+				mmio_dev->vqdev->driver_features &= 0xffffffff; // clear high 32 bits
+				mmio_dev->vqdev->driver_features |= ((uint64_t)(*value) << 32); // write high 32 bits
+			} else {
+				mmio_dev->vqdev->driver_features &= ((uint64_t)0xffffffff << 32); // clear low 32 bits
+				mmio_dev->vqdev->driver_features |= *value; // write low 32 bits
 			}
 			break;
 
@@ -266,42 +281,107 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
 		// TODO: Ron was just setting the qsel here... is that the right thing?
 		//       The spec is pretty clear that qsel is a different register than this.
-		// TODO: Bounds check the value against numvqs, obviously
+		// TODO: Bounds check the value against numvqs, first, obviously
+		// TODO: It looks like QEMU would actually do some sort of notification handling
+		//       when you would write to this register.
+		// bounds check -> virtio_queue_notify -> virtio_queue_notify_vq ->
+		//  if (vq->vring.desc && vq->handle_output) { vq->handle_output(vq->vdev, vq); }
+		//  and handle_output is a method on QEMU's VirtQueue.
+		// seems like when you add a queue to a vdev in qemu, you pass a handle_output function
+		// pointer with it.
+		// our version of vq->vring.desc is probably vq->qdesc but I have to make sure...
+		// rather, qdesc might be the driver saying "hey, here's the address of the qdesc"
+		// TODO: The driver tells the device that there are new buffers available in a queue
+		//       by writing the index of the updated queue to this register. We'll have to figure
+		//       out what to do with this information later.
+		// TODO: Our model is to have spinning IO threads, because we just want to see stuff show up
+		//       in the queues in memory. VIRTIO spec says to catch the write to this register.
+		//       But that will cause a VM exit due to EPT violation, which makes things slow.
+		//       So we will have to prevent the Linux virtio mmio driver from trying to write to
+		//       queue notify. So we're deviating a little bit from the spec for this in order to make
+		//       things faster.
+		//       But for now, we're going to stay single threaded, and just call the handler function
+		//       for the queue directly here, so we can tell if things work or not.
 			break;
 
 		case VIRTIO_MMIO_INTERRUPT_ACK:
 		// TODO: It seems like you are supposed to write the same value as in int_status
 		//       here to indicate the event causing the interrupt was handled
-		// TODO: Ron was just doing mmio.isr & ~value, which would clear the isr register,
+		// TODO: Ron was just doing mmio.isr &= ~value, which would clear the isr register,
 		//       if you wrote the right thing... if you didn't you'd have a really messed
 		//       up looking interrupt in there...
+		// QEMU does the same thing as Ron, but then they also call this virtio_update_irq(vdev) function
+		// which calls virtio_notify_vector(vdev, VIRTIO_NO_VECTOR)
+		// which gets the parent bus of the queue, checks if the bus has a notify function, and
+		// then calls the notify function on the bus. I don't think we really want to model a bus yet...
+		/*
+			VIRTIO_NO_VECTOR is 0xffff
+
+			The virtio_update_irq function was added in the "Separate virtio PCI code" commit, back in 2009
+			At the time it looked for an update_irq binding on vdev->binding and called it with vdev->binding_opaque
+			as an argument.
+
+			The question is, why does qemu dive into the irq handler (ultimately) here?
+
+
+		*/
+
+		/*
+			There are only two bits that matter in the interrupt status register
+			0: interrupt because used ring updated in active vq
+			1: interrupt because dev config changed
+
+			the device sets the interrupt status reg
+			the driver acks handling by writing the same flags for the events it handled to the ack reg
+			The spec says that the driver MUST NOT set any of the undefined bits in this value
+			so we need to protect against that.
+
+		*/
+			*value &= 0b11; // only the lower two bits matter, spec says driver MUST NOT set anything else
+			mmio_dev->int_status &= ~(*value);
 			break;
 
 		case VIRTIO_MMIO_STATUS:
 		// TODO: Ron was doing mmio.status |= value & 0xff;
+		//       why only letting the last byte through?
+		//       I guess this register is only a byte?
+		// TODO: Should we also check the DRIVER_OK bit of the status reg here?
+		//       qemu starts/stops their virtio mmio ioeventfd stuff if the
+		//       VIRTIO_CONFIG_S_DRIVER_OK bit is set/not set
+		// TODO: I guess status is only a byte? Kind of seems that way in the spec...
+			mmio_dev->status = *value & 0xff;
+			if (mmio_dev->status == 0) virtio_mmio_reset(mmio_dev);
 			break;
 
-		case VIRTIO_MMIO_QUEUE_DESC_LOW:
+		case VIRTIO_MMIO_QUEUE_DESC_LOW: // TODO: Test this
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qdesc &= ((uint64_t)0xffffffff << 32); // clear low bits
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qdesc |= *value; // write low bits
 			break;
 
-		case VIRTIO_MMIO_QUEUE_DESC_HIGH:
+		case VIRTIO_MMIO_QUEUE_DESC_HIGH: // TODO: Test this
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qdesc &= 0xffffffff; // clear high bits
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qdesc |= ((uint64_t)(*value) << 32); // write high bits
 			break;
 
-		case VIRTIO_MMIO_QUEUE_AVAIL_LOW:
+		case VIRTIO_MMIO_QUEUE_AVAIL_LOW: // TODO: Test this
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qavail &= ((uint64_t)0xffffffff << 32); // clear low bits
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qavail |= *value; // write low bits
 			break;
 
-		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH:
+		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH: // TODO: Test this
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qavail &= 0xffffffff; // clear high bits
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qavail |= ((uint64_t)(*value) << 32); // write high bits
 			break;
 
-		case VIRTIO_MMIO_QUEUE_USED_LOW:
+		case VIRTIO_MMIO_QUEUE_USED_LOW: // TODO: Test this
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qused &= ((uint64_t)0xffffffff << 32); // clear low bits
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qused |= *value; // write low bits
 			break;
 
-		case VIRTIO_MMIO_QUEUE_USED_HIGH:
+		case VIRTIO_MMIO_QUEUE_USED_HIGH: // TODO: Test this
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qused &= 0xffffffff; // clear high bits
+			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qused |= ((uint64_t)(*value) << 32); // write high bits
 			break;
-
-		case VIRTIO_MMIO_CONFIG:
-			break;
-
 
 		// Read-only register offsets:
 		case VIRTIO_MMIO_MAGIC_VALUE:

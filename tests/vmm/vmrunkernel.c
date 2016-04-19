@@ -358,7 +358,7 @@ void *timer_thread(void *arg)
 
 int debug_cons = 1;
 
-void *consout(void *arg) // cons -> vmrunkernel
+void *consout(void *arg) // guest -> host
 {
 	char *line, *consline, *outline;
 	static struct scatterlist out[] = { {NULL, sizeof(outline)}, };
@@ -417,7 +417,7 @@ void *consout(void *arg) // cons -> vmrunkernel
 // FIXME.
 volatile int consdata = 0;
 
-void *consin(void *arg) // vmrunkernel -> cons
+void *consin(void *arg) // host -> guest
 {
 	struct virtio_threadarg *a = arg;
 	char *line, *outline;

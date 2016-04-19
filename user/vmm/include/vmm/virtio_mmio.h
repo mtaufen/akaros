@@ -171,7 +171,8 @@ struct vqdev {
 	uint64_t device_features;
 	uint64_t driver_features;
 	int numvqs;
-	struct vq vqs[];
+	struct vq vqs[]; // TODO: QEMU macros a fixed-length in here, that they just make the max number of queues
+	// TODO: Is there a way to do a compile time check that someone actually put as many vqs in here as they said they would?
 };
 
 
