@@ -1004,7 +1004,7 @@ int main(int argc, char **argv)
 					virtio_mmio_wr_reg(&cons_mmio_dev, gpa, regp);
 				}
 				else {
-					virtio_mmio_rd_reg(&cons_mmio_dev, gpa);
+					*regp = virtio_mmio_rd_reg(&cons_mmio_dev, gpa);
 				}
 
 
