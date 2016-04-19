@@ -141,6 +141,8 @@ to the queue selected by writing to QueueSel.
 			//       Since queues above this number don't exist, they
 			//       definitely are not available.
 			// Queue indices start at 0
+		// TODO: Is not checking mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qready
+		//       the right thing to do here?
 			if (mmio_dev->queue_sel >= mmio_dev->vqdev.numvqs)
 				return 0;
 			return mmio_dev->vqdev->vqs[mmio_dev->queue_sel].maxqnum;
@@ -218,6 +220,7 @@ operations again. See also 2.3.
 void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value)
 {
 	uint64_t offset = gpa - mmio_dev->base_address;
+	struct virtio_threadarg *qnotify_arg;
 
 	if (!mmio_dev->vqdev) {
 		// If there is no vqdev on the mmio_dev, we just make all registers write-ignored.
@@ -295,13 +298,23 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		//       by writing the index of the updated queue to this register. We'll have to figure
 		//       out what to do with this information later.
 		// TODO: Our model is to have spinning IO threads, because we just want to see stuff show up
-		//       in the queues in memory. VIRTIO spec says to catch the write to this register.
+		//       in the queues in memory. VIRTIO spec says to catch the write to this register, and use
+		//       that as the trigger to process a queue.
 		//       But that will cause a VM exit due to EPT violation, which makes things slow.
 		//       So we will have to prevent the Linux virtio mmio driver from trying to write to
 		//       queue notify. So we're deviating a little bit from the spec for this in order to make
 		//       things faster.
 		//       But for now, we're going to stay single threaded, and just call the handler function
 		//       for the queue directly here, so we can tell if things work or not.
+			if (*value < mmio_dev->vqdev.numvqs) {
+				// TODO: The arg is just for arbitrary use?
+				// TODO: I'm passing 0 for now and just using my own custom handlers
+				// TODO: Since we're just using the console right now I think this only ever calls consout
+				// TODO: consin might stop working when we switch the rd/wr reg functions in vmrunkernel...
+				// TODO: And this stuff did originally work...... so what did we screw with in the Linux driver?
+				//qnotify_arg = &mmio_dev->vqdev->vqs[mmio_dev->qsel];
+				mmio_dev->vqdev->vqs[*value].f(0);
+			}
 			break;
 
 		case VIRTIO_MMIO_INTERRUPT_ACK:

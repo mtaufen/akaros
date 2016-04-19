@@ -481,16 +481,28 @@ void *consin(void *arg) // host -> guest
 	return NULL;
 }
 
-static struct vqdev vq_cons_dev = {
+
+void *consout_mike(void *arg) // guest -> host
+{
+	// how do I know what virtqueue I'm for? I use the arg, I guess.
+
+	printf("consout_mike called, arg: %p\n", arg);
+
+	return NULL;
+}
+
+static struct vqdev cons_vqdev = {
 	name: "console",
 	dev: VIRTIO_ID_CONSOLE,
 	device_features: (uint64_t)1 << VIRTIO_F_VERSION_1, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
 	numvqs: 2,
 	vqs: {
 			{name: "consin", maxqnum: 64, f: consin, arg: (void *)0},
-			{name: "consout", maxqnum: 64, f: consout, arg: (void *)0},
+			{name: "consout", maxqnum: 64, f: consout_mike, arg: (void *)0},
 		}
 };
+
+static struct virtio_mmio_dev cons_mmio_dev;
 
 
 // Recieve thread (not sure whether it's "vm is recving" or "vmm is recving" yet)
@@ -925,7 +937,9 @@ int main(int argc, char **argv)
 	vmctl.regs.tf_rsi = (uint64_t) bp;
 	if (mcp) {
 		/* set up virtio bits, which depend on threads being enabled. */
-		register_virtio_mmio(&vq_cons_dev, virtio_mmio_base);
+		//register_virtio_mmio(&cons_vqdev, virtio_mmio_base);
+		cons_mmio_dev.base_address = virtio_mmio_base;
+		cons_mmio_dev.vqdev = &cons_vqdev;
 	}
 	fprintf(stderr, "threads started\n");
 	fprintf(stderr, "Writing command :%s:\n", cmd);
@@ -985,8 +999,15 @@ int main(int argc, char **argv)
 			if ((gpa & ~0xfffULL) == virtiobase) {
 				if (debug) fprintf(stderr, "DO SOME VIRTIO\n");
 				// Lucky for us the various virtio ops are well-defined.
-				virtio_mmio((struct guest_thread *)vm_thread, gpa, regx, regp,
-				            store);
+				//virtio_mmio((struct guest_thread *)vm_thread, gpa, regx, regp, store);
+				if (store) {
+					virtio_mmio_wr_reg(cons_mmio_dev, gpa, regp);
+				}
+				else {
+					virtio_mmio_rd_reg(cons_mmio_dev, gpa);
+				}
+
+
 				if (debug) fprintf(stderr, "store is %d:\n", store);
 				if (debug) fprintf(stderr, "REGP IS %16x:\n", *regp);
 			} else if ((gpa & 0xfee00000) == 0xfee00000) {
