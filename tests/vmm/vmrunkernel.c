@@ -416,6 +416,7 @@ void *consout(void *arg) // guest -> host
 
 // FIXME.
 volatile int consdata = 0;
+static struct virtio_mmio_dev cons_mmio_dev;
 
 void *consin(void *arg) // host -> guest
 {
@@ -473,7 +474,7 @@ void *consin(void *arg) // host -> guest
 
 		// Send spurious for testing (Gan)
 		set_posted_interrupt(0xE5);
-		virtio_mmio_set_vring_irq();
+		virtio_mmio_set_vring_irq(&cons_mmio_dev);
 
 		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
 	}
@@ -502,7 +503,6 @@ static struct vqdev cons_vqdev = {
 		}
 };
 
-static struct virtio_mmio_dev cons_mmio_dev;
 
 
 // Recieve thread (not sure whether it's "vm is recving" or "vmm is recving" yet)
@@ -1001,10 +1001,10 @@ int main(int argc, char **argv)
 				// Lucky for us the various virtio ops are well-defined.
 				//virtio_mmio((struct guest_thread *)vm_thread, gpa, regx, regp, store);
 				if (store) {
-					virtio_mmio_wr_reg(cons_mmio_dev, gpa, regp);
+					virtio_mmio_wr_reg(&cons_mmio_dev, gpa, regp);
 				}
 				else {
-					virtio_mmio_rd_reg(cons_mmio_dev, gpa);
+					virtio_mmio_rd_reg(&cons_mmio_dev, gpa);
 				}
 
 
@@ -1069,7 +1069,7 @@ int main(int argc, char **argv)
 				printf("does this ever happen?\n");
 				if (consdata) {
 					if (debug) fprintf(stderr, "inject an interrupt\n");
-					virtio_mmio_set_vring_irq();
+					virtio_mmio_set_vring_irq(&cons_mmio_dev);
 					vm_tf->tf_trap_inject = 0x80000000 | virtioirq;
 					//vmctl.command = RESUME;
 					consdata = 0;
@@ -1173,7 +1173,7 @@ int main(int argc, char **argv)
 				fprintf(stderr, "XINT 0x%x 0x%x\n", vm_tf->tf_intrinfo1,
 				        vm_tf->tf_intrinfo2);
 			vm_tf->tf_trap_inject = 0x80000000 | virtioirq;
-			virtio_mmio_set_vring_irq();
+			virtio_mmio_set_vring_irq(&cons_mmio_dev);
 			consdata = 0;
 			//debug = 1;
 			//vmctl.command = RESUME;

@@ -53,15 +53,15 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 
 	// TODO: Are there any more static fields to return here in a non-legacy device?
 	// TODO: Is there a use case where you would want to read registers from the
-	//       mmio_dev that would make sense even if vqdev.numvqs == 0?
+	//       mmio_dev that would make sense even if vqdev->numvqs == 0?
 /*	If there is no vqdev registered with this mmio device,
 	or if there are no vqs on the device, we
 	return all registers as 0 except for the virtio magic
 	number, the mmio version, and the device vendor.
 	*/
-	if (!mmio_dev->vqdev || mmio_dev->vqdev.numvqs == 0) {
+	if (!mmio_dev->vqdev || mmio_dev->vqdev->numvqs == 0) {
 		switch(offset) {
-		case VIRTIO_MMIO_MAGIC:
+		case VIRTIO_MMIO_MAGIC_VALUE:
 			return VIRT_MAGIC;
 		case VIRTIO_MMIO_VERSION:
 			return VIRT_MMIO_VERSION;
@@ -80,8 +80,7 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		//       the read was atomic.
 		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
 		//       and not by these handlers for the driver to touch the device through.
-		printf("Tried to read the virtio mmio device configuration space, aborting.\n");
-		abort();
+		printf("ERROR: Tried to read the virtio mmio device configuration space!\n");
 	}
 
 
@@ -92,7 +91,7 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 Magic value
 0x74726976 (a Little Endian equivalent of the “virt” string).
 */
-		case VIRTIO_MMIO_MAGIC:
+		case VIRTIO_MMIO_MAGIC_VALUE:
 			return VIRT_MAGIC;
 /*
 Device version number
@@ -143,7 +142,7 @@ to the queue selected by writing to QueueSel.
 			// Queue indices start at 0
 		// TODO: Is not checking mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qready
 		//       the right thing to do here?
-			if (mmio_dev->queue_sel >= mmio_dev->vqdev.numvqs)
+			if (mmio_dev->queue_sel >= mmio_dev->vqdev->numvqs)
 				return 0;
 			return mmio_dev->vqdev->vqs[mmio_dev->queue_sel].maxqnum;
 /*
@@ -153,7 +152,7 @@ this virtual queue. Reading from this register returns the last value written to
 read and write accesses apply to the queue selected by writing to QueueSel.
 */
 		case VIRTIO_MMIO_QUEUE_READY:
-			if (mmio_dev->queue_sel >= mmio_dev->vqdev.numvqs)
+			if (mmio_dev->queue_sel >= mmio_dev->vqdev->numvqs)
 				return 0;
 			return mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qready;
 /*
@@ -236,8 +235,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		//       the read was atomic.
 		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
 		//       and not by these handlers for the driver to touch the device through.
-		printf("Tried to write the virtio mmio device configuration space, aborting.\n");
-		abort();
+		printf("ERROR: Tried to write the virtio mmio device configuration space!\n");
 	}
 
 
@@ -259,7 +257,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			break;
 
 		case VIRTIO_MMIO_DRIVER_FEATURES_SEL:
-			mmio->driver_features_sel = *value;
+			mmio_dev->driver_features_sel = *value;
 			break;
 
 		case VIRTIO_MMIO_QUEUE_SEL:
@@ -268,8 +266,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		//       it if it is greater than or equal to 1024 (their VIRTIO_QUEUE_MAX macro)
 		// TODO: If we make sure it's less than numvqs, we probably don't need to bounds-check
 		//       in the read reg function.
-			if (*value < mmio_dev->vqdev.numvqs) {
-				mmio_dev->vqdev->queue_sel = *value;
+			if (*value < mmio_dev->vqdev->numvqs) {
+				mmio_dev->queue_sel = *value;
 			}
 			break;
 
@@ -306,7 +304,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		//       things faster.
 		//       But for now, we're going to stay single threaded, and just call the handler function
 		//       for the queue directly here, so we can tell if things work or not.
-			if (*value < mmio_dev->vqdev.numvqs) {
+			if (*value < mmio_dev->vqdev->numvqs) {
 				// TODO: The arg is just for arbitrary use?
 				// TODO: I'm passing 0 for now and just using my own custom handlers
 				// TODO: Since we're just using the console right now I think this only ever calls consout
@@ -411,8 +409,6 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			// Bad register offset
 			break;
 	}
-
-	return 0;
 }
 
 

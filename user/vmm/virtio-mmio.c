@@ -402,10 +402,10 @@ static void virtio_mmio_write(uint64_t gpa, uint32_t value)
 
 }
 
-void virtio_mmio_set_vring_irq(void)
-{
-	mmio.isr |= VIRTIO_MMIO_INT_VRING;
-}
+// void virtio_mmio_set_vring_irq(void)
+// {
+// 	mmio.isr |= VIRTIO_MMIO_INT_VRING;
+// }
 
 int virtio_mmio(struct guest_thread *vm_thread, uint64_t gpa, int destreg,
                 uint64_t *regp, int store)
