@@ -483,13 +483,27 @@ void *consin(void *arg) // host -> guest
 }
 
 
+// Note: The handlers ("f" on the vq structs) will always end up getting a kick
+//       from the Linux virtio mmio driver when the queue is initially
+//       set up by the driver if we call then in the VIRTIO_MMIO_QUEUE_NOTIFY
+//       write reg handler. We call them there for now, because I'm trying
+//       to get virtio mmio v2 working the way the spec says it does before
+//       we deviate and go to the more efficient separate, spinning,
+//       io threads model.
+
 void *consout_mike(void *arg) // guest -> host
 {
 	// how do I know what virtqueue I'm for? I use the arg, I guess.
 
 	printf("consout_mike called, arg: %p\n", arg);
 
-	return NULL;
+}
+
+void *consin_mike(void *arg) // host -> guest
+{
+
+	printf("consin_mike called, arg: %p\n", arg);
+
 }
 
 static struct vqdev cons_vqdev = {
@@ -498,7 +512,7 @@ static struct vqdev cons_vqdev = {
 	device_features: (uint64_t)1 << VIRTIO_F_VERSION_1, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
 	numvqs: 2,
 	vqs: {
-			{name: "consin", maxqnum: 64, f: consin, arg: (void *)0},
+			{name: "consin", maxqnum: 64, f: consin_mike, arg: (void *)0},
 			{name: "consout", maxqnum: 64, f: consout_mike, arg: (void *)0},
 		}
 };
@@ -996,8 +1010,9 @@ int main(int argc, char **argv)
 				break;
 			}
 			if (debug) fprintf(stderr, "%p %p %p %p %p %p\n", gpa, regx, regp, store, size, advance);
+
 			if ((gpa & ~0xfffULL) == virtiobase) {
-				if (debug) fprintf(stderr, "DO SOME VIRTIO\n");
+				printf("DO SOME VIRTIO\n");
 				// Lucky for us the various virtio ops are well-defined.
 				//virtio_mmio((struct guest_thread *)vm_thread, gpa, regx, regp, store);
 				if (store) {
@@ -1006,6 +1021,7 @@ int main(int argc, char **argv)
 				else {
 					*regp = virtio_mmio_rd_reg(&cons_mmio_dev, gpa);
 				}
+				printf("after virtio read or wr in vmrunkernel \n");
 
 
 				if (debug) fprintf(stderr, "store is %d:\n", store);

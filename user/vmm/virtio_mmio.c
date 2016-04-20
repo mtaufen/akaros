@@ -24,7 +24,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-
+#include <stdio.h>
 #include <vmm/virtio_mmio.h>
 
 
@@ -221,6 +221,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 	uint64_t offset = gpa - mmio_dev->base_address;
 	struct virtio_threadarg *qnotify_arg;
 
+	printf("in wr reg\n");
+
 	if (!mmio_dev->vqdev) {
 		// If there is no vqdev on the mmio_dev, we just make all registers write-ignored.
 		// TODO: Is there a case where we want to provide an mmio transport with no vqdev backend?
@@ -280,6 +282,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			break;
 
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
+		printf("in queue notify\n");
 		// TODO: Ron was just setting the qsel here... is that the right thing?
 		//       The spec is pretty clear that qsel is a different register than this.
 		// TODO: Bounds check the value against numvqs, first, obviously
@@ -311,6 +314,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				// TODO: consin might stop working when we switch the rd/wr reg functions in vmrunkernel...
 				// TODO: And this stuff did originally work...... so what did we screw with in the Linux driver?
 				//qnotify_arg = &mmio_dev->vqdev->vqs[mmio_dev->qsel];
+
+				// TODO: Can't use the original handlers in here, since they have (intended) infinite loops
+				// TODO: Akaros vmrunkernel model would have done a pthread create, but this one will just call
+				//       the handlers for now. We'll figure out how to do the spinning threads, and where the best
+				//       place to spawn them, later on.
 				mmio_dev->vqdev->vqs[*value].f(0);
 			}
 			break;
