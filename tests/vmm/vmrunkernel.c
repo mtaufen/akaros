@@ -497,6 +497,81 @@ void *consout_mike(void *arg) // guest -> host
 
 	printf("consout_mike called, arg: %p\n", arg);
 
+	// TODO: What consout needs to do:
+	// need to know what queue I'm associated with. Best to do that through arg,
+	// so we can easily move the handlers around if we want.
+
+	/*
+	My first scan of the original consout function in vmrunkernel:
+
+	getting kicked (right now that is the same as being called, because
+	we only call in VIRTIO_MMIO_QUEU_NOTIFY at the moment) tells us that
+	there is new stuff in the queue to process
+
+	then we do a wait_for_vq_desc on a vq (v)
+	which gives us an inlen and an outlen, a pointer to a scatterlist (iov)
+
+	then we iterate from 0 to outlen-1 over the iov and iterate from
+	0 to length on each buffer in the iov and print each index in each
+	of those buffers as a char
+
+				for(i = 0; i < outlen; i++) {
+					num++;
+					int j;
+					if (debug_cons) {
+						fprintf(stderr, "CCC: IOV length is %d\n", iov[i].length);
+					}
+					for (j = 0; j < iov[i].length; j++)
+						printf("%c", ((char *)iov[i].v)[j]);
+				}
+
+	then we fflush(stdout)
+
+	then we iterate from outlen to outlen+inlen-1 over the iov and set
+	the length of each of those buffers to 0
+	This is apparently to "send back [an] empty writeable"
+
+	then we add_used(v, head, outlen+inlen) (i.e. put the virtqueue in the used ring)
+
+	and then it would typically loop back to waiting on the vq again
+	*/
+
+	/*
+	How does my first scan track with what the virtio spec says about the console device,
+	and with what the osdev people say about virtio in general?
+
+
+	Virtio spec says that you do this to process new stuff in a queue:
+
+
+
+
+
+
+
+Basics, abridged from osdev (http://wiki.osdev.org/Virtio#Communication):
+
+To send from guest to device (I use device and host interchangeably):
+the guest fills a buffer and then adds that buffer to the buffers array in the vq desc
+then the index of the buffer is written to the next available position in the available ring buffer
+and the available index is incremented
+then the guest writes the index of the vq to the queue notify register
+then the host processes the buffer and adds the buffer index to the used ring, and increments the
+used index field. If interrupts are enabled, the host will also set the low bit of the interrupt
+status register and will trigger an interrupt.
+
+To receive from device in guest:
+the guest adds an empty buffer to the buffers array with the write-only flag set
+then the guest adds the index of the buffer to the available ring and increments the available index
+then the guest writes the virtual queue index to the queue notify register
+when the device has filled the buffer, the device will write the buffer index to the used ring
+and increment the used index. If interrupts are enabled, the device will set the low  bit of the
+interrupt status field, and will trigger an interrupt.
+
+Once a buffer has been placed in the used ring, it may be added back to the available ring, or discarded
+
+	*/
+
 }
 
 void *consin_mike(void *arg) // host -> guest
@@ -506,14 +581,29 @@ void *consin_mike(void *arg) // host -> guest
 
 }
 
+/*
+5.3.6 Device Operation
+
+1. For output, a buffer containing the characters is placed in the port’s transmitq.
+2. When a buffer is used in the receiveq (signalled by an interrupt), the contents is the input
+   to the port associated with the virtqueue for which the notification was received.
+...
+
+5.3.6.1 Driver Requirements: Device Operation
+
+The driver MUST NOT put a device-readable in a receiveq.
+The driver MUST NOT put a device-writable buffer in a transmitq.
+
+*/
+
 static struct vqdev cons_vqdev = {
 	name: "console",
 	dev: VIRTIO_ID_CONSOLE,
 	device_features: (uint64_t)1 << VIRTIO_F_VERSION_1, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
 	numvqs: 2,
 	vqs: {
-			{name: "consin", maxqnum: 64, f: consin_mike, arg: (void *)0},
-			{name: "consout", maxqnum: 64, f: consout_mike, arg: (void *)0},
+			{name: "cons_receiveq(host dev to guest driver)", maxqnum: 64, f: consin_mike, arg: (void *)0},
+			{name: "cons_transmitq(guest driver to host dev)", maxqnum: 64, f: consout_mike, arg: (void *)0},
 		}
 };
 
