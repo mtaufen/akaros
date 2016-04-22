@@ -147,6 +147,7 @@
 // to the queue; a pointer to the thread that gets started when the queue is notified;
 // a physical frame number, which is process virtual to the vmm; an isr (not used yet);
 // status; and a pointer to the virtio struct.
+// struct vqdev;
 struct vq {
 	char *name;
 	void *(*f)(void *arg); // Start this as a thread when a matching virtio is discovered.
@@ -170,6 +171,8 @@ struct vq {
 
 	uint16_t last_avail;
 
+	struct vqdev *vqdev; // The vqdev that contains this vq
+
 };
 
 // a vqdev has a name; magic number; features ( we MUST have features);
@@ -181,6 +184,7 @@ struct vqdev {
 	uint64_t device_features;
 	uint64_t driver_features;
 	int numvqs;
+	void *transport_dev; // The VIRTIO transport that contains this vqdev. i.e. struct virtio_mmio_dev
 	struct vq vqs[]; // TODO: QEMU macros a fixed-length in here, that they just make the max number of queues
 	// TODO: Is there a way to do a compile time check that someone actually put as many vqs in here as they said they would?
 };

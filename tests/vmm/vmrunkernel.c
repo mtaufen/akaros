@@ -528,7 +528,7 @@ uint32_t next_avail_vq_desc(struct vq *vq, struct scatterlist dvec[], // TODO: s
 	vq->last_avail++;
 
 	// TODO: make this an actual error
-	if (head >= vq->qnum)
+	if (head >= vq->vring.num)
 		printf("dumb dumb dumb driver. head >= vq->vring.num in next_avail_vq_desc in vmrunkernel\n");
 
 	// Don't know how many output buffers or input buffers there are yet, depends on desc chain.
@@ -660,7 +660,7 @@ static void *cons_receiveq_fn(struct vq *vq) // host -> guest
 
 }
 
-static oid *cons_transmitq_fn(struct vq *vq) // guest -> host
+static void *cons_transmitq_fn(struct vq *vq) // guest -> host
 {
 	uint32_t head;
 	uint32_t olen, ilen;
@@ -694,10 +694,15 @@ static oid *cons_transmitq_fn(struct vq *vq) // guest -> host
 		dvec[i].length = 0;
 		dvec[i].v = NULL;
 	}
-	add_used_dvec(v, head, olen + ilen);
+	add_used_dvec(vq, head, olen + ilen);
 
 	// 4. set the low bit of the interrupt status register and trigger an interrupt
-
+	virtio_mmio_set_vring_irq(vq->vqdev->transport_dev); // just assuming that the mmio transport was used for now
+	// I think this is how we send the guest an interrupt. Definitely the way we have to do it
+	// concurrently. Not sure if doing this during an exit will mess things up...
+	// also not sure if 0xE5 is the right one to send...
+	set_posted_interrupt(0xE5);
+	ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
 
 	// TODO ^^^^^
 	// we're gonna need a pointer to the device to be on the queue so we can set the irq on it...
@@ -812,9 +817,22 @@ static struct vqdev cons_vqdev = {
 	dev: VIRTIO_ID_CONSOLE,
 	device_features: (uint64_t)1 << VIRTIO_F_VERSION_1, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
 	numvqs: 2,
+	transport_dev: &cons_mmio_dev,
 	vqs: {
-			{name: "cons_receiveq (host dev to guest driver)", maxqnum: 64, f: cons_receiveq_fn, arg: (void *)0},
-			{name: "cons_transmitq (guest driver to host dev)", maxqnum: 64, f: cons_transmitq_fn, arg: (void *)0},
+			{
+				name: "cons_receiveq (host dev to guest driver)",
+				maxqnum: 64,
+				f: cons_receiveq_fn,
+				arg: (void *)0,
+				vqdev: &cons_vqdev
+			},
+			{
+				name: "cons_transmitq (guest driver to host dev)",
+				maxqnum: 64,
+				f: cons_transmitq_fn,
+				arg: (void *)0,
+				vqdev: &cons_vqdev
+			},
 		}
 };
 
