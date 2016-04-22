@@ -219,7 +219,7 @@ operations again. See also 2.3.
 void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value)
 {
 	uint64_t offset = gpa - mmio_dev->base_address;
-	struct virtio_threadarg *qnotify_arg;
+	struct vq *notified_queue;
 
 	printf("in wr reg\n");
 
@@ -319,7 +319,129 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				// TODO: Akaros vmrunkernel model would have done a pthread create, but this one will just call
 				//       the handlers for now. We'll figure out how to do the spinning threads, and where the best
 				//       place to spawn them, later on.
-				mmio_dev->vqdev->vqs[*value].f(0);
+				notified_queue = &mmio_dev->vqdev->vqs[*value];
+				//qnotify_arg->arg = qnotify_arg; // TODO: This makes the most sense to me right now, probably unnecessary though
+				// TODO: Gotta figure out what that virtio pointer on the vq struct is for though...
+				//       Ron treats it like a struct virtqueue (def in include/vmm/virtio.h) in his
+				//       handler fns, and calls wait_for_vq_desc on it.
+				mmio_dev->vqdev->vqs[*value].f(notified_queue);
+
+				/*
+					What do we do about arg...
+					before, Ron was passing a pointer to the queue selected in the QUEUE_PFN
+					mmio handler. He sets the virtio pointer on the vq to a new struct virtqueue
+					created as follows:
+			va->arg->virtio = vring_new_virtqueue(mmio.qsel,
+							  mmio.vqdev->vqs[mmio.qsel].qnum,
+							  mmio.vqdev->vqs[mmio.qsel].qalign,
+							  false, // weak_barriers
+							  (void *)(mmio.vqdev->vqs[mmio.qsel].pfn * mmio.vqdev->vqs[mmio.qsel].qalign),
+							  NULL, NULL, // callbacks
+ 							  mmio.vqdev->vqs[mmio.qsel].name);
+
+ 					I think the only reason to do this is so that you have the right type to use the
+ 					wait_for_vq_desc function on the queue. But there is a lot of magic going on here...
+
+ 					well, that, and when we eventually do want to do no-exit io, we'll need to make sure
+ 					that our queue uses exactly the same layout in memory as Linux's, because that's the
+ 					layout Linux's driver will use when it puts stuff in the queues.
+
+
+
+				What our hacked up version of wait_for_vq_desc does:
+				takes a pointer to a virtqueue,
+				a pointer to a scatterlist,
+				a pointer to an out len,
+				and a pointer to an in len
+
+				Note: sometimes I refer to the vring_virtqueue as the vq
+
+				converts the virtqueue to a vring_virtqueue by calling to_vvq with the virtqueue
+				a vring_virtqueue is a wrapper around the virtqueue that has the vring memory layout
+				for the queue, some configuration bools, the head of the free buffer list, the number
+				of (buffers?) added "since the last sync", the last used index "seen", some stuff to
+				"figure out if their kicks are too delayed" and a data pointer (what data idk,
+				it says "Tokens for callbacks.").
+
+				sets uint16 last_avail to the ret of lg_last_avail( the vring_virtqueue ), which
+				is actually just a macro that returns the vring_virtqueue's last_avail_idx.
+
+				sets the in len and out len to 0
+
+				then, while last_avail equals the vring_virtqueue's vring.avail->idx, it spins, continually doing:
+					return 0 if the _vq is broken (_vq is the virtqueue inside the vring_virtqueue)
+					// TODO: What are the conditions where a virtqueue can be broken?
+					*1*
+					clear the VRING_USED_F_NO_NOTIFY bit on the vq->vring.used->flags
+					mb() // memory barrier
+					if (last_avail != vq->vring.avail->idx)
+						set the vq->vring.used->flags VRING_USED_F_NO_NOTIFY bit
+					*2*
+					set the vq->vring.used->flags VRING_USED_F_NO_NOTIFY_BIT
+
+				Note: The original one would trigger_irq(vq) at *1*
+					  and do an eventfd read (thus waiting) at *2*
+
+				So the end result of that while loop is that the VRING_USED_F_NO_NOTIFY bit is
+				set when we finaly exit the loop (unless the virtqueue was broken)
+
+				Then we error if vq->vring.avail->idx - last_avail > vq->vring.num
+				// TODO: Figure out what that error means.
+
+				rmb(); // read memory barrier
+				the purpose of that barrier is to "make sure we read the descriptor number *after*
+				we read the ring update; don't let the cpu or compiler change the order"
+				// TODO: Figure out and document why this is important
+
+				Now comes the real meat of the function.
+
+				first we set head = vq->vring.avail->ring[last_avail % vq->vring.num]
+				then we increment vq->last_avail_idx
+
+				then set the in len and out len to 0 again. I think this is the one that actually matters
+
+				then:
+				max = vq->vring.num;
+				desc = vq->vring.desc;
+				i = head;
+
+				Ah, so it looks like num is maybe like our maxqnum?
+
+				then they check desc[i].flags for VRING_DESC_F_INDIRECT to see if index i
+				is an indirect entry. If it is an indirect entry, then the buffer contains
+				a descriptor table and, after validating that the len of the buffer (i.e. the
+				size of the table) is evenly divisible by the size of a vring_desc, they set
+				`max` to the number of vring_descs that can fit in the buffer. Finally, they
+				check that the desc[i].addr + desc[i].len neither exceeds the limit on guest
+				memory nor wraps around. That memory limit is hardcoded as
+				#define guest_limit ((1ULL<<48)-1)
+
+				Then they have a loop that builds the iov (array of scatterlists), while
+				checking that the addr and len of each desc that it's putting in the scatterlist
+				neither exceeds the limit on guest memory nor wraps around.
+				They also check that no output descriptors come after the input descriptors.
+				// TODO: We'll probably have to do that.
+				It knows to stop building the iov when (i = next_desc(desc, i, max)) != max
+
+				Note: The static unsigned next_desc(struct vring_desc *desc, unsigned int i, unsigned int max)
+				function does the following:
+					return max if the descriptor says it doesn't chain (VRING_DESC_F_NEXT bit set on the desc[i].flags)
+					otherwise set next to desc[i].next
+					wmb() // write memory barrier // TODO: I'm not really sure that this is necessary?
+					check that next is not greater or equal to max (cause error if so)
+					return next
+
+
+				So basically, the goal of our wait_for_vq_desc is to spin until the available index is
+				incremented, and then
+
+				The old one
+
+
+
+
+
+				*/
 			}
 			break;
 

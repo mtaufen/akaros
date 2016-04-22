@@ -700,7 +700,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 	if (!vq)
 		return NULL;
 
-	// I *think* they correctly offset from vq for the vring? 
+	// I *think* they correctly offset from vq for the vring?
 	vring_init(&vq->vring, num, pages, vring_align);
 	fprintf(stderr, "done vring init\n");
 	vq->vq.callback = callback;
@@ -1022,7 +1022,7 @@ unsigned int wait_for_vq_desc(struct virtqueue *_vq,
 	 * Make sure we read the descriptor number *after* we read the ring
 	 * update; don't let the cpu or compiler change the order.
 	 */
-	rmb();
+	rmb(); //  Mike: This barrier is here to make sure the update detection always happens before reading the idx of the updated thing
 
 	/*
 	 * Grab the next descriptor number they're advertising, and increment
@@ -1086,7 +1086,7 @@ unsigned int wait_for_vq_desc(struct virtqueue *_vq,
 			errx(1, "Looped descriptor");
 	} while ((i = next_desc(desc, i, max)) != max);
 
-	if (vringdebug) fprintf(stderr, "RETURN head %d\n", head); 
+	if (vringdebug) fprintf(stderr, "RETURN head %d\n", head);
 	return head;
 }
 

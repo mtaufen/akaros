@@ -483,6 +483,8 @@ void *consin(void *arg) // host -> guest
 }
 
 
+
+
 // Note: The handlers ("f" on the vq structs) will always end up getting a kick
 //       from the Linux virtio mmio driver when the queue is initially
 //       set up by the driver if we call then in the VIRTIO_MMIO_QUEUE_NOTIFY
@@ -491,11 +493,26 @@ void *consin(void *arg) // host -> guest
 //       we deviate and go to the more efficient separate, spinning,
 //       io threads model.
 
-void *consout_mike(void *arg) // guest -> host
+
+void *cons_receiveq_fn(void *arg) // host -> guest
+{
+	struct vq *q = arg;
+	printf("cons_receiveq_fn called.\n\targ: %p, qname: %s\n", arg, q->name);
+
+}
+
+void *cons_transmitq_fn(void *arg) // guest -> host
 {
 	// how do I know what virtqueue I'm for? I use the arg, I guess.
+	struct vq *q = arg;
 
-	printf("consout_mike called, arg: %p\n", arg);
+	printf("cons_transmitq_fn called.\n\targ: %p, qname: %s\n", arg, q->name);
+
+	// 1. process the buffer
+	// 2. add it to the used ring and increment the used index field
+	// 3. set the low bit of the interrupt status register and trigger an interrupt
+
+
 
 	// TODO: What consout needs to do:
 	// need to know what queue I'm associated with. Best to do that through arg,
@@ -572,14 +589,11 @@ Once a buffer has been placed in the used ring, it may be added back to the avai
 
 	*/
 
-}
 
-void *consin_mike(void *arg) // host -> guest
-{
-
-	printf("consin_mike called, arg: %p\n", arg);
 
 }
+
+
 
 /*
 5.3.6 Device Operation
@@ -602,8 +616,8 @@ static struct vqdev cons_vqdev = {
 	device_features: (uint64_t)1 << VIRTIO_F_VERSION_1, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
 	numvqs: 2,
 	vqs: {
-			{name: "cons_receiveq(host dev to guest driver)", maxqnum: 64, f: consin_mike, arg: (void *)0},
-			{name: "cons_transmitq(guest driver to host dev)", maxqnum: 64, f: consout_mike, arg: (void *)0},
+			{name: "cons_receiveq (host dev to guest driver)", maxqnum: 64, f: cons_receiveq_fn, arg: (void *)0},
+			{name: "cons_transmitq (guest driver to host dev)", maxqnum: 64, f: cons_transmitq_fn, arg: (void *)0},
 		}
 };
 
@@ -631,8 +645,8 @@ static struct vqdev vq_net_dev = {
 	device_features: VIRTIO_F_VERSION_1,
 	numvqs: 2,
 	vqs: {
-			{name: "netrecv", maxqnum: 64, f: netrecv, arg: (void *)0},
-			{name: "netsend", maxqnum: 64, f: netsend, arg: (void *)0},
+			{name: "netrecv", maxqnum: 64, f: netrecv, arg: (void *)0}, // queue 0 is the console dev receiveq
+			{name: "netsend", maxqnum: 64, f: netsend, arg: (void *)0}, // queue 1 is the console dev transmitq
 		}
 };
 

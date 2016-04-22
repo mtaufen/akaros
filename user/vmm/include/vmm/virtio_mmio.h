@@ -137,6 +137,8 @@
 #define VIRTIO_MMIO_INT_VRING		(1 << 0)
 #define VIRTIO_MMIO_INT_CONFIG		(1 << 1)
 
+
+// TODO: This "struct vq" is all ours. So I can clean it up and change it around however I want (Mike)
 // A vq defines on queue attached to a device. It has a function, started as a thread;
 // an arg, for arbitrary use; qnum, which is an indicator of how much memory is given
 // to the queue; a pointer to the thread that gets started when the queue is notified;
@@ -157,7 +159,7 @@ struct vq {
 	uint64_t qdesc;
 	uint64_t qavail;
 	uint64_t qused;
-	void *virtio;
+	void *virtio; // TODO: I can probably get rid of this...
 
 	uint32_t qready;
 
