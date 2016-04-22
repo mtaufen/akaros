@@ -137,6 +137,9 @@
 #define VIRTIO_MMIO_INT_VRING		(1 << 0)
 #define VIRTIO_MMIO_INT_CONFIG		(1 << 1)
 
+// TODO: using the ros one for now becasue the vmm one still tries to include linux/types.
+ //      I'll convert the types to stuff in stdint when I re-import all these headers from linux
+#include <ros/virtio_ring.h>
 
 // TODO: This "struct vq" is all ours. So I can clean it up and change it around however I want (Mike)
 // A vq defines on queue attached to a device. It has a function, started as a thread;
@@ -149,19 +152,23 @@ struct vq {
 	void *(*f)(void *arg); // Start this as a thread when a matching virtio is discovered.
 	void *arg;
 	int maxqnum; // how many things the q gets? or something.
-	int qnum;
+	int qnum; // DEPRECATED! TODO: Migrate away from using these; use vring.num instead
 	int qalign;
 	pthread_t thread;
 	/* filled in by virtio probing. */
 	uint64_t pfn;
 	uint32_t isr; // not used yet but ... // TODO: If it's not used then what is it!?
 	uint32_t status;
-	uint64_t qdesc;
-	uint64_t qavail;
-	uint64_t qused;
+	uint64_t qdesc; // DEPRECATED! TODO: Migrate away from using these; use vring.desc instead
+	uint64_t qavail; // DEPRECATED! TODO: Migrate away from using these; use vring.avail instead
+	uint64_t qused; // DEPRECATED! TODO: Migrate away from using these; use vring.used instead
 	void *virtio; // TODO: I can probably get rid of this...
 
+	struct vring vring; // ring of buffers on the vq
+
 	uint32_t qready;
+
+	uint16_t last_avail;
 
 };
 

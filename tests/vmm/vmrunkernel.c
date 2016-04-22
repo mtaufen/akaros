@@ -482,8 +482,168 @@ void *consin(void *arg) // host -> guest
 	return NULL;
 }
 
+// For traversing the linked list of descriptors
+// Also based on Linux's lguest.c
+uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max)
+{
+	uint32_t next;
+
+	if (!(desc[i].flags & VRING_DESC_F_NEXT)) {
+		// No more in the chain, so return max to signal that we reached the end
+		return max;
+	}
+
+	next = desc[i].next;
+
+	// TODO: what does this wmb actually end up compiling as now that we're out of linux?
+	wmb(); // just because lguest put it here. not sure why they did that yet.
+
+	// TODO: Make this an actual error with a real error message
+	// TODO: Figure out what lguest.c's "bad_driver" function does
+	if (next >= max) {
+		printf("NONONONONONO. NO!\nYou can not tell me I have a desc at an index outside the queue.\nYou liar!\nvmrunkernel.c-get_next_desc\n");
+	}
+
+	return next;
+}
+
+// TODO: Rename this fn
+// Based on wait_for_vq_desc in Linux lguest.c
+uint32_t next_avail_vq_desc(struct vq *vq, struct scatterlist dvec[], // TODO: scatterlist is just some type sitting in our virtio.h. We can clean this up.
+                            uint32_t *olen, uint32_t *ilen)
+{
+	uint32_t i, head, max;
+	struct vring_desc *desc;
+
+	if (vq->last_avail == vq->vring.avail->idx) {
+		// If we got poked but there are no queues available, then just return 0
+		// this will work for now because we're only in these handlers during an
+		// exit due to EPT viol. due to driver write to QUEUE_NOTIFY register on dev.
+		return 0;
+	}
+
+	// Mod because it's a *ring*
+	// TODO: maybe switch to using vq->vring.num for ours too
+	head = vq->vring.avail->ring[vq->last_avail % vq->vring.num];
+	vq->last_avail++;
+
+	// TODO: make this an actual error
+	if (head >= vq->qnum)
+		printf("dumb dumb dumb driver. head >= vq->vring.num in next_avail_vq_desc in vmrunkernel\n");
+
+	// Don't know how many output buffers or input buffers there are yet, depends on desc chain.
+	*olen = *ilen = 0;
+
+	max = vq->vring.num; // Since vring.num is the size of the queue, max is the most buffers we could possibly find
+	desc = vq->vring.desc; // qdesc is the address of the descriptor (array?TODO) set by the driver
+	i = head;
+
+	// TODO: lguest manually checks that the pointers on the vring fields aren't goofy when the driver
+	//       initally says they are ready, we should probably do that somewhere too.
+
+	/*NOTE: (from lguest)
+	 * We have to read the descriptor after we read the descriptor number,
+	 * but there's a data dependency there so the CPU shouldn't reorder
+	 * that: no rmb() required.
+	 */
 
 
+	do {
+
+		// If it's an indirect descriptor, we travel through the layer of indirection and then
+		// we're at table of descriptors chained by `next`, and since they are chained we can
+		// handle them the same way as direct descriptors once we're through that indirection.
+		if (desc[i].flags & VRING_DESC_F_INDIRECT) {
+			// TODO: lguest says bad_driver if they gave us an indirect desc but didn't set the right
+			//       feature bit for indirect descs. Not gonna check that for now, since I might rearrange
+			//       where the feature bits live, and it won't be particularly dangerous since we live in
+			//       a bubble for the time being. But we should start checking that in the future.
+			//       Before the bubble bursts.
+
+			// TODO: Should also error if we find an indirect within an indirect (only one table per desc)
+			//       lguest seems to interpret this as "the only indirect desc can be the first in the chain"
+			//       I trust Rusty on that interpretation. (desc != vq->vring.desc is a bad_driver)
+			if (desc != vq->vring.desc)
+				printf("Bad! Indirect desc within indirect desc!\n");
+
+			// TODO: handle error (again, see lguest's bad_driver_vq) if these checks fail too
+			if (desc[i].flags & VRING_DESC_F_NEXT) // can't set NEXT if you're INDIRECT (e.g. table vs linked list entry)
+				printf("virtio Error: indirect and next both set\n");
+
+			if (desc[i].len % sizeof(struct vring_desc)) // nonzero mod indicates wrong table size
+				printf("virtio Error; bad size for indirect table\n");
+
+			// NOTE: Virtio spec says the device MUST ignore the write-only flag in the
+			//       descriptor for an indirect table. So we ignore it.
+
+			max = desc[i].len / sizeof(struct vring_desc);
+			desc = desc[i].addr; // TODO: check that this pointer isn't goofy
+			i = 0;
+
+
+			// TODO: Make this a real error too. The driver MUST NOT create a descriptor chain longer
+			//       than the Queue Size of the device.
+			// Mike XXX: Where did we put the queue size of the device? lguest has it on pci config
+			//           since we're not pci, I think we want vq->vring.num. In fact, in lguest vring.num
+			//           is the same as pci config's queue size, and we are going to let the driver
+			//           set the vring.num for mmio (I figure), since I think this is where we'll put
+			//           the thing written to the QueueNum register (how big the queues the driver will
+			//           use are).
+			// TODO: do we allow the driver to write something greater than QueueNumMax to QueueNum?
+			//       checking both vring.num and maxqnum for now, need to double check whether we
+			//       actually just need vring.num to be checked.
+			if (max > vq->vring.num || max > vq->maxqnum) {
+				//TODO make this an actual error
+				printf("indirect desc has too many entries. number greater than vq->maxqnum\n");
+			}
+		}
+
+		// Now build the scatterlist of descriptors
+		// TODO: And, you know, we ought to check the pointers on these descriptors too!
+		// TODO: You better make sure you pass a big enough scatterlist to this function
+		//       for whatever the eventual value of *olen + *ilen will be!
+		dvec[*olen + *ilen].length = desc[i].len;
+		dvec[*olen + *ilen].v = desc[i].addr; // NOTE: .v is basically our scatterlist/iovec's iov_base
+
+		if (desc[i].flags & VRING_DESC_F_WRITE) {
+			// input descriptor, increment *ilen
+			(*ilen)++;
+		}
+		else {
+			// output descriptor, check that this is *before* we read any input descriptors
+			// and then increment *olen if we're ok
+
+			// TODO: Make this an actual error
+			if (*ilen) {
+				printf("Bad! Output descriptor came after an input descriptor!\n");
+			}
+
+			(*olen)++;
+		}
+
+		if (*olen + *ilen > max) {
+			// TODO: make this an actual error!
+			printf("The descriptor probably looped somewhere! BAD! (*olen + *ilen > max)\n");
+		}
+
+
+	} while ((i = get_next_desc(desc, i, max)) != max);
+
+	return head;
+
+}
+
+// TODO: Rename this to something more succinct and understandable!
+// Based on the add_used function in lguest.c
+static void add_used_dvec(struct vq *vq, uint32_t head, uint32_t len)
+{
+	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].id = head;
+	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].len = len;
+	// TODO: what does this wmb actually end up compiling as now that we're out of linux?
+	wmb(); // So the values get written to the used buffer before we update idx
+	vq->vring.used->idx++;
+	// vq->pending_used++; // lguest would watch this one to see if it needed to trigger an interrupt
+}
 
 // Note: The handlers ("f" on the vq structs) will always end up getting a kick
 //       from the Linux virtio mmio driver when the queue is initially
@@ -494,19 +654,56 @@ void *consin(void *arg) // host -> guest
 //       io threads model.
 
 
-void *cons_receiveq_fn(void *arg) // host -> guest
+static void *cons_receiveq_fn(struct vq *vq) // host -> guest
 {
-	struct vq *q = arg;
-	printf("cons_receiveq_fn called.\n\targ: %p, qname: %s\n", arg, q->name);
+	printf("cons_receiveq_fn called.\n\targ: %p, qname: %s\n", vq, vq->name);
 
 }
 
-void *cons_transmitq_fn(void *arg) // guest -> host
+static oid *cons_transmitq_fn(struct vq *vq) // guest -> host
 {
-	// how do I know what virtqueue I'm for? I use the arg, I guess.
-	struct vq *q = arg;
+	uint32_t head;
+	uint32_t olen, ilen;
+	uint32_t i, j;
+	// TODO: scatterlist dvec. I think we need this to be big enough for the max buffers in a queue.
+	//       But I think that is set by the driver... for now I just made it really big. Don't really
+	//       want to dynamically allocate due to overhead. Maybe we'll arbitrarily define a MaxQueueNum
+	//       for our mmio devices and use that here.(I think that's what qemu does)
+	static struct scatterlist dvec[1024];
 
-	printf("cons_transmitq_fn called.\n\targ: %p, qname: %s\n", arg, q->name);
+
+	// how do I know what virtqueue I'm for? I use the arg, I guess.
+
+	//printf("cons_transmitq_fn called.\n\targ: %p, qname: %s\n", vq, vq->name);
+
+	// 1. get the buffers:
+	head = next_avail_vq_desc(vq, dvec, &olen, &ilen);
+
+	// 2. process the buffers:
+	for (i = 0; i < olen; ++i) {
+		for (j = 0; j < dvec[i].length; ++j) {
+			printf("%c", ((char *)dvec[i].v)[j]);
+		}
+	}
+
+	// 3: clear any input buffers and add all the buffers to the used ring:
+	for (i = olen; i < olen + ilen; ++i) {
+		// clear the input buffers so they are empty when the guest gets them back
+		// TODO: Is just setting .length to 0 enough to avoid leaking info through the .v?
+		//       should look into that, for now we clear both.
+		dvec[i].length = 0;
+		dvec[i].v = NULL;
+	}
+	add_used_dvec(v, head, olen + ilen);
+
+	// 4. set the low bit of the interrupt status register and trigger an interrupt
+
+
+	// TODO ^^^^^
+	// we're gonna need a pointer to the device to be on the queue so we can set the irq on it...
+	// will probably do something like vq->vqdev->transport_dev where transport is a void pointer.
+
+
 
 	// 1. process the buffer
 	// 2. add it to the used ring and increment the used index field
@@ -1116,7 +1313,7 @@ int main(int argc, char **argv)
 			if (debug) fprintf(stderr, "%p %p %p %p %p %p\n", gpa, regx, regp, store, size, advance);
 
 			if ((gpa & ~0xfffULL) == virtiobase) {
-				printf("DO SOME VIRTIO\n");
+				// printf("DO SOME VIRTIO\n");
 				// Lucky for us the various virtio ops are well-defined.
 				//virtio_mmio((struct guest_thread *)vm_thread, gpa, regx, regp, store);
 				if (store) {
@@ -1125,7 +1322,7 @@ int main(int argc, char **argv)
 				else {
 					*regp = virtio_mmio_rd_reg(&cons_mmio_dev, gpa);
 				}
-				printf("after virtio read or wr in vmrunkernel \n");
+				// printf("after virtio read or wr in vmrunkernel \n");
 
 
 				if (debug) fprintf(stderr, "store is %d:\n", store);
