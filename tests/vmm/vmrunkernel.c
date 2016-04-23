@@ -516,12 +516,18 @@ uint32_t next_avail_vq_desc(struct vq *vq, struct scatterlist dvec[], // TODO: s
 {
 	uint32_t i, head, max;
 	struct vring_desc *desc;
+	eventfd_t event;
+
+	// The first thing we do is read from the eventfd. If nothing has been written to it yet,
+	// then the driver isn't done setting things up and we want to wait for it to finish.
+	// For example, dereferencing the vq->vring.avail pointer could segfault if the driver
+	// has not yet written a valid address to it.
+	if (eventfd_read(vq->eventfd, &event))
+		printf("next_avail_vq_desc event read failed?\n");
+	// TODO: I think I want a memory barrier here? In case the event fd gets written but the avail idx hasn't yet?
+	mb();
 
 	while (vq->last_avail == vq->vring.avail->idx) {
-		eventfd_t event;
-
-
-
 		// If we got poked but there are no queues available, then just return 0
 		// this will work for now because we're only in these handlers during an
 		// exit due to EPT viol. due to driver write to QUEUE_NOTIFY register on dev.
@@ -706,7 +712,7 @@ static void *cons_transmitq_fn(struct vq *vq) // guest -> host
 	// how do I know what virtqueue I'm for? I use the arg, I guess.
 
 	//printf("cons_transmitq_fn called.\n\targ: %p, qname: %s\n", vq, vq->name);
-
+fprintf(stderr, "\nlaunched the console transmitq thread\n");
 while(1) {
 	// 1. get the buffers:
 	head = next_avail_vq_desc(vq, dvec, &olen, &ilen);
@@ -1306,14 +1312,16 @@ int main(int argc, char **argv)
 		// TODO: Do this in a better place!
 		//cons_mmio_dev.vqdev->vqs[0].eventfd =
 		cons_mmio_dev.vqdev->vqs[1].eventfd = eventfd(0, 0); // TODO: Look into "semaphore mode"
+		fprintf(stderr, "eventfd is: %d\n", cons_mmio_dev.vqdev->vqs[1].eventfd);
 		if (pthread_create(&cons_mmio_dev.vqdev->vqs[1].thread,
 			               NULL,
 			               cons_mmio_dev.vqdev->vqs[1].f,
 			               &cons_mmio_dev.vqdev->vqs[1])) {
 			// service thread creation failed
 			// TODO: Make this an actual error.
-			printf("pth_create failed for cons_mmio_dev vq 1 (transmit)\n");
+			fprintf(stderr, "pth_create failed for cons_mmio_dev vq 1 (transmit)\n");
 		}
+
 
 	}
 	fprintf(stderr, "threads started\n");

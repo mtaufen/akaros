@@ -331,7 +331,10 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				//       handler fns, and calls wait_for_vq_desc on it.
 
 				//mmio_dev->vqdev->vqs[*value].f(notified_queue);
-				eventfd_write(notified_queue->eventfd, 1); // kick the queue's service thread
+				if (notified_queue->eventfd > 0) {
+					eventfd_write(notified_queue->eventfd, 1); // kick the queue's service thread
+				}
+				// TODO: Should we panic if there's no valid eventfd?
 
 				/*
 					What do we do about arg...
