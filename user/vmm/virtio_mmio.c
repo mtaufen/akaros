@@ -26,6 +26,7 @@
 
 #include <stdio.h>
 #include <vmm/virtio_mmio.h>
+#include <sys/eventfd.h>
 
 
 #define VIRT_MAGIC 0x74726976 /* 'virt' */
@@ -320,12 +321,17 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				// TODO: Akaros vmrunkernel model would have done a pthread create, but this one will just call
 				//       the handlers for now. We'll figure out how to do the spinning threads, and where the best
 				//       place to spawn them, later on.
+
 				notified_queue = &mmio_dev->vqdev->vqs[*value];
+
+
 				//qnotify_arg->arg = qnotify_arg; // TODO: This makes the most sense to me right now, probably unnecessary though
 				// TODO: Gotta figure out what that virtio pointer on the vq struct is for though...
 				//       Ron treats it like a struct virtqueue (def in include/vmm/virtio.h) in his
 				//       handler fns, and calls wait_for_vq_desc on it.
-				mmio_dev->vqdev->vqs[*value].f(notified_queue);
+
+				//mmio_dev->vqdev->vqs[*value].f(notified_queue);
+				eventfd_write(notified_queue->eventfd, 1); // kick the queue's service thread
 
 				/*
 					What do we do about arg...

@@ -36,6 +36,7 @@
 
 #include <pthread.h>
 #include <vmm/sched.h>
+
 /*
  * Control registers
  */
@@ -170,6 +171,8 @@ struct vq {
 	uint32_t qready;
 
 	uint16_t last_avail;
+
+	int eventfd; // We write to the eventfd to kick the queue; the queue's service fn (f) will block on eventfd read
 
 	struct vqdev *vqdev; // The vqdev that contains this vq
 

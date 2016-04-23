@@ -26,6 +26,8 @@
 #include <vmm/virtio_config.h>
 #include <vmm/sched.h>
 
+#include <sys/eventfd.h>
+
 struct vmctl vmctl;
 struct vmm_gpcore_init gpci;
 
@@ -515,11 +517,40 @@ uint32_t next_avail_vq_desc(struct vq *vq, struct scatterlist dvec[], // TODO: s
 	uint32_t i, head, max;
 	struct vring_desc *desc;
 
-	if (vq->last_avail == vq->vring.avail->idx) {
+	while (vq->last_avail == vq->vring.avail->idx) {
+		eventfd_t event;
+
+
+
 		// If we got poked but there are no queues available, then just return 0
 		// this will work for now because we're only in these handlers during an
 		// exit due to EPT viol. due to driver write to QUEUE_NOTIFY register on dev.
-		return 0;
+		// return 0;
+
+
+
+		// TODO: We will move from just returning zero to just sleeping
+		//       again if we were kicked but nothing is available.
+		// NOTE: I do not kick the guest with an irq here. I do that in
+		//       the individual service functions when it is necessary.
+
+		// TODO: What to do here about VRING_DESC_F_NO_NOTIFY flag?
+		// NOTE: If you look at the comments in virtio_ring.h, the VRING_DESC_F_NO_NOTIFY
+		//       flag is set by the host to say to the guest "Don't kick me when you add
+		//       a buffer." But this comment also says that it is an optimization, is not
+		//       always reliable, and that the guest will still kick the host when out of
+		//       buffers. So I'm leaving that out for now, and we can revisit why it might
+		//       improve performance sometime in the future.
+		//       TODO: That said, I might still need to unset the bit. It should be unset
+		//             by default, because it is only supposed to be set by the host and
+		//             I never set it. But this is worth double-checking.
+
+
+		if (eventfd_read(vq->eventfd, &event))
+			printf("next_avail_vq_desc event read failed?\n");
+
+		// TODO: Do I want a memory barrier here? In case the event fd gets written but the avail idx hasn't yet?
+		mb();
 	}
 
 	// Mod because it's a *ring*
@@ -676,6 +707,7 @@ static void *cons_transmitq_fn(struct vq *vq) // guest -> host
 
 	//printf("cons_transmitq_fn called.\n\targ: %p, qname: %s\n", vq, vq->name);
 
+while(1) {
 	// 1. get the buffers:
 	head = next_avail_vq_desc(vq, dvec, &olen, &ilen);
 
@@ -703,11 +735,7 @@ static void *cons_transmitq_fn(struct vq *vq) // guest -> host
 	// also not sure if 0xE5 is the right one to send...
 	set_posted_interrupt(0xE5);
 	ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
-
-	// TODO ^^^^^
-	// we're gonna need a pointer to the device to be on the queue so we can set the irq on it...
-	// will probably do something like vq->vqdev->transport_dev where transport is a void pointer.
-
+}
 
 
 	// 1. process the buffer
@@ -1273,6 +1301,20 @@ int main(int argc, char **argv)
 		//register_virtio_mmio(&cons_vqdev, virtio_mmio_base);
 		cons_mmio_dev.base_address = virtio_mmio_base;
 		cons_mmio_dev.vqdev = &cons_vqdev;
+
+		// Create the eventfd and launch the service threads for the console
+		// TODO: Do this in a better place!
+		//cons_mmio_dev.vqdev->vqs[0].eventfd =
+		cons_mmio_dev.vqdev->vqs[1].eventfd = eventfd(0, 0); // TODO: Look into "semaphore mode"
+		if (pthread_create(&cons_mmio_dev.vqdev->vqs[1].thread,
+			               NULL,
+			               cons_mmio_dev.vqdev->vqs[1].f,
+			               &cons_mmio_dev.vqdev->vqs[1])) {
+			// service thread creation failed
+			// TODO: Make this an actual error.
+			printf("pth_create failed for cons_mmio_dev vq 1 (transmit)\n");
+		}
+
 	}
 	fprintf(stderr, "threads started\n");
 	fprintf(stderr, "Writing command :%s:\n", cmd);
