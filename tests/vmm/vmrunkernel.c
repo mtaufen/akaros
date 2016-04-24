@@ -576,8 +576,9 @@ static void add_used_iov(struct vq *vq, uint32_t head, uint32_t len)
 //       io threads model.
 
 
-static void *cons_receiveq_fn(struct vq *vq) // host -> guest
+static void *cons_receiveq_fn(void *_vq) // host -> guest
 {
+	struct vq *vq = _vq;
 	uint32_t head;
 	uint32_t olen, ilen;
 	uint32_t i, j;
@@ -634,8 +635,9 @@ static void *cons_receiveq_fn(struct vq *vq) // host -> guest
 	return NULL;
 }
 
-static void *cons_transmitq_fn(struct vq *vq) // guest -> host
+static void *cons_transmitq_fn(void *_vq) // guest -> host
 {
+	struct vq *vq = _vq;
 	uint32_t head;
 	uint32_t olen, ilen;
 	uint32_t i, j;
