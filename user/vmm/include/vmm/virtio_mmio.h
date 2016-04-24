@@ -34,10 +34,6 @@
 
 #pragma once
 
-#include <pthread.h>
-#include <vmm/sched.h>
-#include <vmm/virtio.h>
-
 /*
  * Control registers
  */
@@ -139,11 +135,37 @@
 #define VIRTIO_MMIO_INT_VRING		(1 << 0)
 #define VIRTIO_MMIO_INT_CONFIG		(1 << 1)
 
+// NOTE: Stuff above this line taken from linux/virtio_mmio.h,
+//       stuff below this line was added for Akaros and is
+//       copyright (c) 2016 Google Inc.
 
-// The mmio device that wraps the vqdev. Holds things like the base
-// address of the device, the device status register, queue selectors, etc.
-// TODO: Remove fields that I just shim out or don't need, or that are already on the vqdev
-// this is a NON LEGACY DEVICE!
+/*
+ * Copyright (c) 2016 Google Inc.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of
+ * the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/*
+ * Please note: Our virtio implementation is inspired by QEMU's
+ * virtio-mmio.c and Linux's lguest.c. Both of QEMU's virtio-mmio.c
+ * and Linux's lguest.c are released under the GNU General Public
+ * License version 2 or later.
+ * QEMU's virtio-mmio.c is copyright (c) 2011 Linaro Limited
+ * Linux's lguest.c was written by Rusty Russel
+ */
+
+#include <stdint.h>
+#include <vmm/virtio.h>
+
+// The virtio mmio transport device. Wraps a virtio_vq_dev.
 struct virtio_mmio_dev {
 	// The base address of the virtio mmio device
 	// we save the same value here as we report to guest via kernel cmd line
@@ -161,25 +183,37 @@ struct virtio_mmio_dev {
 	// Interrupt status register
 	uint32_t isr;
 
-	// Status register for the device
-	uint32_t status;
+	// This utility function will be called when the device needs to interrupt
+	// the guest. You can have it do whatever you want, but it is required.
+	void (*poke_guest)(void);
 
-	// ConfigGeneration, used to check that access to device-specific config space was atomic
+	// Status flags for the device
+	uint8_t status;
+
+	// ConfigGeneration, used to check that access to device-specific
+	// configuration space was atomic
 	uint32_t cfg_gen;
 
 	// The generic vq device contained by this mmio transport
-	struct vqdev *vqdev;
-
-	// TODO: What to do about the device-specific configuration space?
+	struct virtio_vq_dev *vqdev;
 };
 
-// virtio_mmio_rd_reg and virtio_mmio_wr_reg are used to process the guest's driver's
-// reads and writes to the mmio device registers. gpa is the guest physical address
-// that the driver tried to write to; this is used to calculate the target register
-uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa);
-void     virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value);
-
-// Sets the VIRTIO_MMIO_INT_VRING bit in the interrupt status register for the device
+// Sets the VIRTIO_MMIO_INT_VRING bit in the interrupt status
+// register for the device
 void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev);
 
-// Mike: This file is from Linux. Ok.
+// Sets the VIRTIO_MMIO_INT_CONFIG bit in the interrupt status
+// register for the device
+void virtio_mmio_set_cfg_irq(struct virtio_mmio_dev *mmio_dev);
+
+
+// virtio_mmio_rd and virtio_mmio_wr:
+// Used to read and write to the mmio device registers.
+// - gpa is the guest physical address that the driver tried to write to.
+//   It is used to calculate the offset from the mmio device's base address,
+//   and thus the target register of the access operation.
+// - size is the width of the access operation in bytes.
+uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
+                        uint64_t gpa, uint8_t size);
+void     virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev,
+                        uint64_t gpa, uint8_t size, uint32_t *value);

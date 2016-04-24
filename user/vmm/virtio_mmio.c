@@ -1,33 +1,33 @@
-// Mike's implementation of virtio mmio device.
-// Mike's additions are Copyright (c) 2016 Google, Inc.
-
-// Partially based on the qemu implementation (although that was for the legacy spec)
-// That implementation was licensed as:
 /*
- * Virtio MMIO bindings
+ * Copyright (c) 2016 Google Inc.
  *
- * Copyright (c) 2011 Linaro Limited
- *
- * Author:
- *  Peter Maydell <peter.maydell@linaro.org>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License; either version 2
- * of the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of
+ * the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+/*
+ * Please note: Our virtio implementation is inspired by QEMU's
+ * virtio-mmio.c and Linux's lguest.c. Both of QEMU's virtio-mmio.c
+ * and Linux's lguest.c are released under the GNU General Public
+ * License version 2 or later.
+ * QEMU's virtio-mmio.c is copyright (c) 2011 Linaro Limited
+ * Linux's lguest.c was written by Rusty Russel
  */
 
 #include <stdio.h>
-#include <vmm/virtio_mmio.h>
+#include <string.h>
+#include <pthread.h>
+#include <unistd.h>
 #include <sys/eventfd.h>
-
+#include <vmm/virtio_config.h>
+#include <vmm/virtio_mmio.h>
 
 #define VIRT_MAGIC 0x74726976 /* 'virt' */
 
@@ -35,27 +35,116 @@
 
 #define VIRT_MMIO_VENDOR 0x52414B41 /* 'AKAR' */
 
-static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
+void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev)
 {
-	// TODO: Actually reset the device!
+	mmio_dev->isr |= VIRTIO_MMIO_INT_VRING;
 }
 
-// TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
+void virtio_mmio_set_cfg_irq(struct virtio_mmio_dev *mmio_dev)
+{
+	mmio_dev->isr |= VIRTIO_MMIO_INT_CONFIG;
+}
 
-// Reads are ALWAYS 32 bit at a time
-uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
+static void virtio_mmio_reset_cfg(struct virtio_mmio_dev *mmio_dev)
+{
+	if (!mmio_dev->vqdev->cfg || mmio_dev->vqdev->cfg_sz == 0)
+		VIRTIO_DEV_WARNX(mmio_dev->vqdev,
+			"Attempt to reset the device-specific configuration space,"
+			" but the device does not provide it. Generally, this region"
+			" is required, so you should probably do something about that.");
+
+	// If a default device-specific configuration is provided, copy that
+	// into the device-specific configuration space. Otherwise, clear the
+	// device-specific configuration space.
+	if (mmio_dev->vqdev->cfg_d)
+		memcpy(mmio_dev->vqdev->cfg, mmio_dev->vqdev->cfg_d,
+			   mmio_dev->vqdev->cfg_sz);
+	else
+		memset(mmio_dev->vqdev->cfg, 0x0, mmio_dev->vqdev->cfg_sz);
+
+	// Increment the ConfigGeneration, since the config space just got reset.
+	// We can't simply set it to 0, because we must ensure that it changes when
+	// the config space changes and it might currently be set to 0.
+	mmio_dev->cfg_gen++;
+}
+
+// TODO: virtio_mmio_reset could use a careful audit. We have not yet
+//       encountered a scenario where the driver resets the device
+//       while lots of things are in-flight; thus far we have only seen
+//       device resets prior to the first initialization sequence.
+static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
+{
+	int i;
+
+	if (!mmio_dev->vqdev)
+		return;
+
+	fprintf(stderr, "virtio mmio device reset: %s\n", mmio_dev->vqdev->name);
+
+	// Clear any driver-activated feature bits
+	mmio_dev->vqdev->dri_feat = 0;
+
+	// virtio-v1.0-cs04 s2.1.2 Device Status Field
+	// The device MUST initialize device status to 0 upon reset
+	mmio_dev->status = 0;
+
+	// virtio-v1.0-cs04 s4.2.2.1 MMIO Device Register Layout
+	// Upon reset, the device MUST clear all bits in InterruptStatus
+	mmio_dev->isr = 0;
+
+	// virtio-v1.0-cs04 s4.2.2.1 MMIO Device Register Layout
+	// Upon reset, the device MUST clear...ready bits in the QueueReady
+	// register for all queues in the device.
+	for (i = 0; i < mmio_dev->vqdev->num_vqs; ++i) {
+		if (mmio_dev->vqdev->vqs[i].srv_th) {
+		// FIXME! PLEASE, FIXME!
+		// TODO: For now we are going to make device resets an error
+		//       once service threads exist on the queues. This is obviously
+		//       not sustainable, because the driver needs to be able
+		//       to reset the device after certain errors occur.
+		//
+		//       In the future, when we actually decide how we want
+		//       to clean up the threads, the sequence might look
+		//       something like this:
+		//       1. Ask the queue's service thread to exit and wait
+		//          for it to finish and exit.
+		//       2. Once it has exited, close the queue's eventfd
+		//          and set both the eventfd and srv_th fields to 0.
+			VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+				"The driver reset the device after queue service threads had"
+				" started running. This is NOT a restriction imposed by virtio!"
+				" We just haven't implemented something that will kill service"
+				" threads yet.");
+		}
+
+		mmio_dev->vqdev->vqs[i].qready = 0;
+		mmio_dev->vqdev->vqs[i].last_avail = 0;
+	}
+
+	virtio_mmio_reset_cfg(mmio_dev);
+}
+
+uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
+                        uint64_t gpa, uint8_t size)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
+	uint8_t *target; // target of read from device-specific config space
+	const char *err; // returned err strings
 
-	// TODO: Are there any more static fields to return here in a non-legacy device?
-	// TODO: Is there a use case where you would want to read registers from the
-	//       mmio_dev that would make sense even if vqdev->numvqs == 0?
-/*	If there is no vqdev registered with this mmio device,
-	or if there are no vqs on the device, we
-	return all registers as 0 except for the virtio magic
-	number, the mmio version, and the device vendor.
-	*/
-	if (!mmio_dev->vqdev || mmio_dev->vqdev->numvqs == 0) {
+	// virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization (MMIO section)
+	if (mmio_dev->vqdev->dev_id == 0
+		&& offset != VIRTIO_MMIO_MAGIC_VALUE
+		&& offset != VIRTIO_MMIO_VERSION
+		&& offset != VIRTIO_MMIO_DEVICE_ID)
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+			"Attempt to read from a register not MagicValue, Version, or"
+			" DeviceID on a device whose DeviceID is 0x0"
+			"\n  See virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization");
+
+	// Return 0 for all registers except the magic number,
+	// the mmio version, and the device vendor when either
+	// there is no vqdev or no vqs on the vqdev.
+	if (!mmio_dev->vqdev || mmio_dev->vqdev->num_vqs == 0) {
 		switch(offset) {
 		case VIRTIO_MMIO_MAGIC_VALUE:
 			return VIRT_MAGIC;
@@ -68,121 +157,179 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		}
 	}
 
-	if (offset >= VIRTIO_MMIO_CONFIG) {
-		// TODO: Figure out what to do for reading the device config space
-		// TODO: Will also probably have to set the ConfigGeneration stuff
-		//       when I finally get to writing the device configuration space.
-		//       And will definitely have to read that value twice to make sure
-		//       the read was atomic.
-		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
-		//       and not by these handlers for the driver to touch the device through.
-		printf("ERROR: Tried to read the virtio mmio device configuration space!\n");
+	// Now we know that the host provided a vqdev. As soon as the driver tries
+	// to read the magic number, we know it's considering the device. This is
+	// a great time to validate the features the host is providing. The host
+	// must provide a valid combination of features, or we crash here
+	// until the offered feature combination is made valid.
+	if (offset == VIRTIO_MMIO_MAGIC_VALUE) {
+		// NOTE: If you ever decide to change this to a warning instead of an
+		//       error, you might want to return an invalid magic value here
+		//       to tell the driver that it is poking at a bad device.
+		err = virtio_validate_feat(mmio_dev->vqdev,
+		                           mmio_dev->vqdev->dev_feat);
+		if (err)
+			VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+				"The feature combination offered by the device is not valid."
+				" This must be fixed before the device can be used."
+				"\n  Validation Error: %s", err);
 	}
 
 
-// TODO: note that some comments are direct from the virtio mmio spec, and some of my notes too.
-	// the spec I am referencing is: http://docs.oasis-open.org/virtio/virtio/v1.0/cs04/virtio-v1.0-cs04.html
+	// Warn if FAILED status bit is set.
+	// virtio-v1.0-cs04 s2.1.1 Device Status Field
+	if (mmio_dev->status & VIRTIO_CONFIG_S_FAILED)
+		VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+			"The FAILED status bit is set."
+			" The driver should probably reset the device before continuing."
+			"\n  See virtio-v1.0-cs04 s2.1.1 Device Status Field");
+
+	// TODO: I could only do a limited amount of testing on the device-
+	//       specific config space, because I was limited to seeing what
+	//       the guest driver for the console device would do. You may
+	//       run into issues when you implement virtio-net, since that
+	//       does more with the device-specific config.
+	if (offset >= VIRTIO_MMIO_CONFIG) {
+		offset -= VIRTIO_MMIO_CONFIG;
+
+		if (!mmio_dev->vqdev->cfg || mmio_dev->vqdev->cfg_sz == 0) {
+			VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+				"Driver attempted to read the device-specific configuration"
+				" space, but the device failed to provide it.");
+		}
+
+		// virtio-v1.0-cs04 s3.1.1 Device Initialization
+		if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER)) {
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Driver attempted to read the device-specific configuration"
+				" space before setting the DRIVER status bit."
+				"\n  See virtio-v1.0-cs04 s3.1.1 Device Initialization");
+		}
+
+		if ((offset + size) > mmio_dev->vqdev->cfg_sz
+			|| (offset + size) < offset) {
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to read invalid offset of the device specific"
+				" configuration space, or (offset + read width)"
+				" wrapped around.");
+		}
+
+		target = (uint8_t*)((uint64_t)mmio_dev->vqdev->cfg + offset);
+
+		// TODO: Check that size matches the size of the field at offset
+		//       for the given device? i.e. virtio_console_config.rows
+		//       should only be accessible via a 16 bit read or write.
+		//       I haven't done this yet, it will be a significant
+		//       undertaking and maintainence commitment, because you
+		//       will have to do it for every virtio device you
+		//       want to use in the future.
+		switch(size) {
+			case 1:
+				return *((uint8_t*)target);
+			case 2:
+				if ((uint64_t)target % 2 != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver must use 16 bit aligned reads for"
+						" reading from 16 bit values in the device-specific"
+						" configuration space."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout");
+				return *((uint16_t*)target);
+			case 4:
+				if ((uint64_t)target % 4 != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver must use 32 bit aligned reads for"
+						" reading from 32 or 64 bit values in the"
+						" device-specific configuration space."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout");
+				return *((uint32_t*)target);
+			default:
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must use 8, 16, or 32 bit wide and aligned"
+					" reads for reading from the device-specific"
+					" configuration space."
+					"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+					" Register Layout");
+		}
+	}
+
+	// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
+	if (size != 4 || (offset % 4) != 0) {
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+			"The driver must only use 32 bit wide and aligned reads for"
+			" reading the control registers on the MMIO transport."
+			"\n  See virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout");
+	}
+
+	// virtio-v1.0-cs04 Table 4.1
 	switch(offset) {
-/*
-Magic value
-0x74726976 (a Little Endian equivalent of the “virt” string).
-*/
+		// Magic value
+		// 0x74726976 (a Little Endian equivalent of the “virt” string).
 		case VIRTIO_MMIO_MAGIC_VALUE:
 			return VIRT_MAGIC;
-/*
-Device version number
-0x2. Note: Legacy devices (see 4.2.4 Legacy interface) used 0x1.
-*/
+
+		// Device version number
+		// 0x2. Note: Legacy devices (see 4.2.4 Legacy interface) used 0x1.
 		case VIRTIO_MMIO_VERSION:
 			return VIRT_MMIO_VERSION;
-/*
-Virtio Subsystem Device ID
-See 5 Device Types for possible values. Value zero (0x0) is used to define a
-system memory map with placeholder devices at static, well known addresses,
-assigning functions to them depending on user’s needs.
-*/
+
+		// Virtio Subsystem Device ID (see virtio-v1.0-cs04 sec. 5 for values)
+		// Value 0x0 is used to define a system memory map with placeholder
+		// devices at static, well known addresses.
 		case VIRTIO_MMIO_DEVICE_ID:
 			return mmio_dev->vqdev->dev_id;
-/*
-Virtio Subsystem Vendor ID
-*/
+
+		// Virtio Subsystem Vendor ID
 		case VIRTIO_MMIO_VENDOR_ID:
 			return VIRT_MMIO_VENDOR;
-/*
-Flags representing features the device supports
-Reading from this register returns 32 consecutive flag bits, the least significant
-bit depending on the last value written to DeviceFeaturesSel. Access to this register
-returns bits DeviceFeaturesSel ∗ 32 to (DeviceFeaturesSel ∗ 32) + 31, eg. feature
-bits 0 to 31 if DeviceFeaturesSel is set to 0 and features bits 32 to 63 if
-DeviceFeaturesSel is set to 1. Also see 2.2 Feature Bits.
-*/
+
+		// Flags representing features the device supports
 		case VIRTIO_MMIO_DEVICE_FEATURES:
+			if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER))
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				         "Attempt to read device features before setting"
+				         " the DRIVER status bit."
+				         "\n  See virtio-v1.0-cs04 s3.1.1"
+				         " Device Initialization");
+
 			if (mmio_dev->dev_feat_sel) // high 32 bits requested
 				return mmio_dev->vqdev->dev_feat >> 32;
 			return mmio_dev->vqdev->dev_feat; // low 32 bits requested
-/*
-Maximum virtual queue size
-Reading from the register returns the maximum size (number of elements) of the queue
-the device is ready to process or zero (0x0) if the queue is not available. This applies
-to the queue selected by writing to QueueSel.
-*/
+
+		// Maximum virtual queue size
+		// Returns the maximum size (number of elements) of the queue the device
+		// is ready to process or zero (0x0) if the queue is not available.
+		// Applies to the queue selected by writing to QueueSel.
 		case VIRTIO_MMIO_QUEUE_NUM_MAX:
-			// TODO: Spec says to return 0 if the queue is not available
-			// TODO: Exactly what do they mean by "available"?
-			// TODO: For now, we are assuming that if you gave a vqdev
-			//       to the mmio_dev, the queues on it are "available."
-			//       I am going to guard against the qsel being
-			//       greater than the numvqs on the vq_def, however.
-			//       Since queues above this number don't exist, they
-			//       definitely are not available.
-			// Queue indices start at 0
-		// TODO: Is not checking mmio_dev->vqdev->vqs[mmio_dev->qsel].qready
-		//       the right thing to do here?
-			if (mmio_dev->qsel >= mmio_dev->vqdev->numvqs)
+		// TODO: Are there other cases that count as "queue not available"?
+		// NOTE: !qready does not count as "queue not available".
+			if (mmio_dev->qsel >= mmio_dev->vqdev->num_vqs)
 				return 0;
-			return mmio_dev->vqdev->vqs[mmio_dev->qsel].maxqnum;
-/*
-Virtual queue ready bit
-Writing one (0x1) to this register notifies the device that it can execute requests from
-this virtual queue. Reading from this register returns the last value written to it. Both
-read and write accesses apply to the queue selected by writing to QueueSel.
-*/
+			return mmio_dev->vqdev->vqs[mmio_dev->qsel].qnum_max;
+
+		// Virtual queue ready bit
+		// Applies to the queue selected by writing to QueueSel.
 		case VIRTIO_MMIO_QUEUE_READY:
-			if (mmio_dev->qsel >= mmio_dev->vqdev->numvqs)
+			if (mmio_dev->qsel >= mmio_dev->vqdev->num_vqs)
 				return 0;
 			return mmio_dev->vqdev->vqs[mmio_dev->qsel].qready;
-/*
-Interrupt status
-Reading from this register returns a bit mask of events that caused the
-device interrupt to be asserted. The following events are possible:
 
-Used Ring Update
-- bit 0: the interrupt was asserted because the device has updated the Used Ring in
-         at least one of the active virtual queues.
-
-Configuration Change
-- bit 1: the interrupt was asserted because the configuration of
-         the device has changed.
-*/
+		// Interrupt status
+		// Bit mask of events that caused the device interrupt to be asserted.
+		// bit 0: Used Ring Update
+		// bit 1: Configuration Change
 		case VIRTIO_MMIO_INTERRUPT_STATUS:
 			return mmio_dev->isr;
-/*
-Device status
-Reading from this register returns the current device status flags. Writing non-zero values
-to this register sets the status flags, indicating the driver progress. Writing zero (0x0)
-to this register triggers a device reset. See also p. 4.2.3.1 Device Initialization.
-*/
+
+		// Device status
 		case VIRTIO_MMIO_STATUS:
 			return mmio_dev->status;
-/*
-Configuration atomicity value
-Reading from this register returns a value describing a version of the device-specific
-configuration space (see Config). The driver can then access the configuration space and,
-when finished, read ConfigGeneration again. If no part of the configuration space has changed
-between these two ConfigGeneration reads, the returned values are identical. If the values are
-different, the configuration space accesses were not atomic and the driver has to perform the
-operations again. See also 2.3.
-*/
+
+		// Configuration atomicity value
+		// Contains a version for the device-specific configuration space
+		// The driver checks this version before and after accessing the config
+		// space, and if the values don't match it repeats the access.
 		case VIRTIO_MMIO_CONFIG_GENERATION:
 			return mmio_dev->cfg_gen;
 
@@ -201,346 +348,688 @@ operations again. See also 2.3.
 		case VIRTIO_MMIO_QUEUE_USED_LOW:
 		case VIRTIO_MMIO_QUEUE_USED_HIGH:
 			// Read of write-only register
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to read write-only device register offset 0x%x.",
+				offset);
 			return 0;
 		default:
 			// Bad register offset
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to read invalid device register offset 0x%x.",
+				offset);
 			return 0;
 	}
 
 	return 0;
 }
 
-// Writes are always 32 bits at a time! As far as I care and for the time being anyway,
-// this (TODO) might change when we get to the device-specific config space
-void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value)
+// Based on check_virtqueue from lguest.c
+// We call this when the driver writes 0x1 to QueueReady
+static void check_vring(struct virtio_vq *vq) {
+	// First make sure that the pointers on the vring are all valid:
+	virtio_check_pointer(vq, (uint64_t)vq->vring.desc,
+	                     sizeof(*vq->vring.desc) * vq->vring.num,
+	                     __FILE__, __LINE__);
+	virtio_check_pointer(vq, (uint64_t)vq->vring.avail,
+	                     sizeof(*vq->vring.avail) * vq->vring.num,
+	                     __FILE__, __LINE__);
+	virtio_check_pointer(vq, (uint64_t)vq->vring.used,
+	                     sizeof(*vq->vring.used) * vq->vring.num,
+	                     __FILE__, __LINE__);
+
+
+	// virtio-v1.0-cs04 s2.4.9.1 Virtqueue Notification Suppression
+	if (vq->vring.used->flags != 0)
+		VIRTIO_DRI_ERRX(vq->vqdev,
+			"The driver must initialize the flags field of the used ring"
+			" to 0 when allocating the used ring."
+			"\n  See virtio-v1.0-cs04 s2.4.9.1 Virtqueue"
+			" Notification Suppression");
+}
+
+void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
+                    uint8_t size, uint32_t *value)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
-	struct vq *notified_queue;
+	struct virtio_vq *notified_queue;
+	uint8_t *target; // target of write to device-specific config space
 	void *temp_ptr; // for facilitating bitwise ops on pointers
-
-	// printf("in wr reg\n");
+	const char *err; // returned err strings
 
 	if (!mmio_dev->vqdev) {
-		// If there is no vqdev on the mmio_dev, we just make all registers write-ignored.
-		// TODO: Is there a case where we want to provide an mmio transport with no vqdev backend?
+		// If there is no vqdev on the mmio_dev,
+		// we just make all registers write-ignored.
 		return;
 	}
 
+	// virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization (MMIO)
+	if (mmio_dev->vqdev->dev_id == 0)
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+			"Attempt to write to a device whose DeviceID is 0x0."
+			"\n  See virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization");
+
+	// Warn if FAILED and trying to do something that is definitely not a reset.
+	// virtio-v1.0-cs04 s2.1.1 Device Status Field
+	if (offset != VIRTIO_MMIO_STATUS
+		&& (mmio_dev->status & VIRTIO_CONFIG_S_FAILED))
+		VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+			"The FAILED status bit is set."
+			" The driver should probably reset the device before continuing."
+			"\n  See virtio-v1.0-cs04 s2.1.1 Device Status Field");
+
+	// TODO: I could only do a limited amount of testing on the device-
+	//       specific config space, because I was limited to seeing what
+	//       the guest driver for the console device would do. You may
+	//       run into issues when you implement virtio-net, since that
+	//       does more with the device-specific config. (In fact, I don't think
+	//       the guest driver ever even tried to write the device-specific
+	//       config space for the console, so this section is entirely untested)
 	if (offset >= VIRTIO_MMIO_CONFIG) {
-		// TODO: Figure out what to do for writing the device config space
-		// TODO: Will also probably have to set the ConfigGeneration stuff
-		//       when I finally get to writing the device configuration space.
-		//       And will definitely have to read that value twice to make sure
-		//       the read was atomic.
-		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
-		//       and not by these handlers for the driver to touch the device through.
-		printf("ERROR: Tried to write the virtio mmio device configuration space!\n");
+		offset -= VIRTIO_MMIO_CONFIG;
+
+		if (!mmio_dev->vqdev->cfg || mmio_dev->vqdev->cfg_sz == 0) {
+			VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+				"Driver attempted to write to the device-specific configuration"
+				" space, but the device failed to provide it.");
+		}
+
+		// virtio-v1.0-cs04 s3.1.1 Device Initialization
+		if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)) {
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Driver attempted to write the device-specific configuration"
+				" space before setting the FEATURES_OK status bit."
+				"\n  See virtio-v1.0-cs04 s3.1.1 Device Initialization");
+		}
+
+		if ((offset + size) > mmio_dev->vqdev->cfg_sz
+			|| (offset + size) < offset) {
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to write invalid offset of the device specific"
+				" configuration space, or (offset + write width)"
+				" wrapped around.");
+		}
+
+		target = (uint8_t*)((uint64_t)mmio_dev->vqdev->cfg + offset);
+
+		// TODO: Check that size matches the size of the field at offset
+		//       for the given device? i.e. virtio_console_config.rows
+		//       should only be accessible via a 16 bit read or write.
+		//       I haven't done this yet, it will be a significant
+		//       undertaking and maintainence commitment, because you
+		//       will have to do it for every virtio device you
+		//       want to use in the future.
+		switch(size) {
+			case 1:
+				*((uint8_t*)target) = *((uint8_t*)value);
+			case 2:
+				if ((uint64_t)target % 2 != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver must use 16 bit aligned writes for"
+						" writing to 16 bit values in the device-specific"
+						" configuration space."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout");
+				*((uint16_t*)target) = *((uint16_t*)value);
+			case 4:
+				if ((uint64_t)target % 4 != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver must use 32 bit aligned writes for"
+						" writing to 32 or 64 bit values in the device-specific"
+						" configuration space."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout");
+				*((uint32_t*)target) = *((uint32_t*)value);
+			default:
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must use 8, 16, or 32 bit wide and aligned"
+					" writes for writing to the device-specific"
+					" configuration space."
+					"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+					" Register Layout");
+		}
+
+		// Increment cfg_gen because the device-specific config changed
+		mmio_dev->cfg_gen++;
+
+		// Notify the driver that the device-specific config changed
+		virtio_mmio_set_cfg_irq(mmio_dev);
+		if (mmio_dev->poke_guest)
+			mmio_dev->poke_guest();
+
+		return;
 	}
 
+	// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
+	if (size != 4 || (offset % 4) != 0) {
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+			"The driver must only use 32 bit wide and aligned writes for"
+			" writing the control registers on the MMIO transport."
+			"\n  See virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout");
+	}
 
-// TODO: note that some comments are direct from the virtio mmio spec, and some of my notes too.
-	// the spec I am referencing is: http://docs.oasis-open.org/virtio/virtio/v1.0/cs04/virtio-v1.0-cs04.html
+	// virtio-v1.0-cs04 Table 4.1
 	switch(offset) {
+
+		// Device (host) features word selection.
 		case VIRTIO_MMIO_DEVICE_FEATURES_SEL:
 			mmio_dev->dev_feat_sel = *value;
 			break;
 
-		case VIRTIO_MMIO_DRIVER_FEATURES: // TODO: Test this one, make sure it works right
-			if (mmio_dev->dri_feat_sel) {
-				mmio_dev->vqdev->dri_feat &= 0xffffffff; // clear high 32 bits
-				mmio_dev->vqdev->dri_feat |= ((uint64_t)(*value) << 32); // write high 32 bits
+		// Device feature flags activated by the driver
+		case VIRTIO_MMIO_DRIVER_FEATURES:
+			// virtio-v1.0-cs04 s3.1.1 Device Initialization
+			if (mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK) {
+				// NOTE: The spec just says the driver isn't allowed to accept
+				//       NEW feature bits after setting FEATURES_OK. Although
+				//       the language makes it seem like it might be fine to
+				//       let the driver un-accept features after it sets
+				//       FEATURES_OK, this would require very careful handling,
+				//       so for now we just don't allow the driver to write to
+				//       the DriverFeatures register after FEATURES_OK is set.
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver may not accept (i.e. activate) new feature bits"
+					" offered by the device after setting FEATURES_OK."
+					"\n  See virtio-v1.0-cs04 s3.1.1 Device Initialization");
+			}
+			else if (mmio_dev->dri_feat_sel) {
+				// clear high 32 bits
+				mmio_dev->vqdev->dri_feat &= 0xffffffff;
+				// write high 32 bits
+				mmio_dev->vqdev->dri_feat |= ((uint64_t)(*value) << 32);
 			} else {
-				mmio_dev->vqdev->dri_feat &= ((uint64_t)0xffffffff << 32); // clear low 32 bits
-				mmio_dev->vqdev->dri_feat |= *value; // write low 32 bits
+				// clear low 32 bits
+				mmio_dev->vqdev->dri_feat &= ((uint64_t)0xffffffff << 32);
+				// write low 32 bits
+				mmio_dev->vqdev->dri_feat |= *value;
 			}
 			break;
 
+		// Activated (guest) features word selection
 		case VIRTIO_MMIO_DRIVER_FEATURES_SEL:
 			mmio_dev->dri_feat_sel = *value;
 			break;
 
+		// Virtual queue index
+		// Selects the virtual queue that QueueNumMax, QueueNum, QueueReady,
+		// QueueDescLow, QueueDescHigh, QueueAvailLow, QueueAvailHigh,
+		// QueueUsedLow and QueueUsedHigh apply to. The index number of the
+ 		// first queue is zero (0x0).
 		case VIRTIO_MMIO_QUEUE_SEL:
-		// TODO: For now, if the value is above the number of vqs, we just won't set it.
-		//       This may or may not be the right thing to do. QEMU just decides not to set
-		//       it if it is greater than or equal to 1024 (their VIRTIO_QUEUE_MAX macro)
-		// TODO: If we make sure it's less than numvqs, we probably don't need to bounds-check
-		//       in the read reg function.
-			if (*value < mmio_dev->vqdev->numvqs) {
-				mmio_dev->qsel = *value;
+		// NOTE: We must allow the driver to write whatever they want to
+		//       QueueSel, because QueueNumMax contians 0x0 for invalid
+		//       QueueSel indices.
+			mmio_dev->qsel = *value;
+			break;
+
+		// Virtual queue size
+		// The queue size is the number of elements in the queue, thus in the
+		// Descriptor Table, the Available Ring and the Used Ring. Writes
+		// notify the device what size queue the driver will use.
+		// This applies to the queue selected by writing to QueueSel.
+		case VIRTIO_MMIO_QUEUE_NUM:
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
+				if (*value <= mmio_dev->vqdev->vqs[mmio_dev->qsel].qnum_max)
+					mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.num = *value;
+				else if ((*value != 0) && (*value & ((*value) - 1)))
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver may only write powers of 2 to the"
+						" QueueNum register."
+						"\n  See virtio-v1.0-cs04 s2.4 Virtqueues");
+				else
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to write value greater than QueueNumMax"
+						" to QueueNum register.");
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueNum register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
 			break;
 
-		case VIRTIO_MMIO_QUEUE_NUM:
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.num = *value;
-			break;
-
+		// Virtual queue ready bit
+		// Writing one (0x1) to this register notifies the device that it can
+		// execute requests from the virtual queue selected by QueueSel.
 		case VIRTIO_MMIO_QUEUE_READY:
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = *value;
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				// NOTE: For now, anything that is not a toggle between
+				//       0x1 and 0x0 will bounce with no effect whatsoever.
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready == 0x0
+					&& *value == 0x1) {
+					// Driver is trying to write 0x1 QueueReady when the queue
+					// is currently disabled (QueueReady is 0x0). We validate
+					// the vring the driver provided, set up an eventfd for the
+					// queue, set qready on the queue to 0x1, and then launch
+					// the service thread for the queue.
+
+					// Check that the host actually provided a service function
+					if (!mmio_dev->vqdev->vqs[mmio_dev->qsel].srv_fn) {
+						VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+							"The host must provide a service function for each"
+							" queue on the device before the driver writes 0x1"
+							" to QueueReady. No service function found for"
+							" queue %u.", mmio_dev->qsel);
+					}
+
+					check_vring(&mmio_dev->vqdev->vqs[mmio_dev->qsel]);
+
+					mmio_dev->vqdev->vqs[mmio_dev->qsel].eventfd = eventfd(0,0);
+					mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = 0x1;
+
+					if (pthread_create(
+					               // service thread id
+					               &mmio_dev->vqdev->vqs[mmio_dev->qsel].srv_th,
+					               // no special thread attrs
+					               NULL,
+					               // service function that srv_th starts in
+					               mmio_dev->vqdev->vqs[mmio_dev->qsel].srv_fn,
+					               // arg passed to srv_fn is the vq itself
+					               &mmio_dev->vqdev->vqs[mmio_dev->qsel]))
+						VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+							"pthread_create failed when trying to start service"
+							" thread after driver wrote 0x1 to QueueReady.");
+
+				} else if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready == 0x1
+					       && *value == 0x0) {
+					// Driver is trying to revoke QueueReady while the queue is
+					// currently enabled (QueueReady is 0x1).
+					// TODO: For now we are going to just make this an error.
+					//       In the future, when we actually decide how we want
+					//       to clean up the threads, the sequence might look
+					//       something like this:
+					//       1. Ask the queue's service thread to exit and wait
+					//          for it to finish and exit.
+					//       2. Once it has exited, close the queue's eventfd
+					//          and set both the eventfd and srv_th fields to 0.
+					//       3. Finally, write 0x0 to QueueReady.
+					VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+						"Our (Akaros) MMIO device does not currently allow the"
+						" driver to revoke QueueReady (i.e. change QueueReady"
+						" from 0x1 to 0x0). The driver tried to revoke it, so"
+						" whatever you are doing might require this ability.");
+				}
+
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueReady register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
+		// Queue notifier
+		// Writing a queue index to this register notifies the device that
+		// there are new buffers to process in that queue.
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
-		// printf("in queue notify\n");
-		// TODO: Ron was just setting the qsel here... is that the right thing?
-		//       The spec is pretty clear that qsel is a different register than this.
-		// TODO: Bounds check the value against numvqs, first, obviously
-		// TODO: It looks like QEMU would actually do some sort of notification handling
-		//       when you would write to this register.
-		// bounds check -> virtio_queue_notify -> virtio_queue_notify_vq ->
-		//  if (vq->vring.desc && vq->handle_output) { vq->handle_output(vq->vdev, vq); }
-		//  and handle_output is a method on QEMU's VirtQueue.
-		// seems like when you add a queue to a vdev in qemu, you pass a handle_output function
-		// pointer with it.
-		// our version of vq->vring.desc is probably vq->qdesc but I have to make sure...
-		// rather, qdesc might be the driver saying "hey, here's the address of the qdesc"
-		// TODO: The driver tells the device that there are new buffers available in a queue
-		//       by writing the index of the updated queue to this register. We'll have to figure
-		//       out what to do with this information later.
-		// TODO: Our model is to have spinning IO threads, because we just want to see stuff show up
-		//       in the queues in memory. VIRTIO spec says to catch the write to this register, and use
-		//       that as the trigger to process a queue.
-		//       But that will cause a VM exit due to EPT violation, which makes things slow.
-		//       So we will have to prevent the Linux virtio mmio driver from trying to write to
-		//       queue notify. So we're deviating a little bit from the spec for this in order to make
-		//       things faster.
-		//       But for now, we're going to stay single threaded, and just call the handler function
-		//       for the queue directly here, so we can tell if things work or not.
-			if (*value < mmio_dev->vqdev->numvqs) {
-				// TODO: The arg is just for arbitrary use?
-				// TODO: I'm passing 0 for now and just using my own custom handlers
-				// TODO: Since we're just using the console right now I think this only ever calls consout
-				// TODO: consin might stop working when we switch the rd/wr reg functions in vmrunkernel...
-				// TODO: And this stuff did originally work...... so what did we screw with in the Linux driver?
-				//qnotify_arg = &mmio_dev->vqdev->vqs[mmio_dev->qsel];
-
-				// TODO: Can't use the original handlers in here, since they have (intended) infinite loops
-				// TODO: Akaros vmrunkernel model would have done a pthread create, but this one will just call
-				//       the handlers for now. We'll figure out how to do the spinning threads, and where the best
-				//       place to spawn them, later on.
-
+			if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER_OK))
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"Attempt to notify the device before setting"
+					" the DRIVER_OK status bit."
+					"\n  See virtio-v1.0-cs04 s3.1.1 Device Initialization");
+			else if (*value < mmio_dev->vqdev->num_vqs) {
 				notified_queue = &mmio_dev->vqdev->vqs[*value];
 
-
-				//qnotify_arg->arg = qnotify_arg; // TODO: This makes the most sense to me right now, probably unnecessary though
-				// TODO: Gotta figure out what that virtio pointer on the vq struct is for though...
-				//       Ron treats it like a struct virtqueue (def in include/vmm/virtio.h) in his
-				//       handler fns, and calls wait_for_vq_desc on it.
-
-				//mmio_dev->vqdev->vqs[*value].f(notified_queue);
-				if (notified_queue->eventfd > 0) {
-					eventfd_write(notified_queue->eventfd, 1); // kick the queue's service thread
-				}
-				// TODO: Should we panic if there's no valid eventfd?
-
-				/*
-					What do we do about arg...
-					before, Ron was passing a pointer to the queue selected in the QUEUE_PFN
-					mmio handler. He sets the virtio pointer on the vq to a new struct virtqueue
-					created as follows:
-			va->arg->virtio = vring_new_virtqueue(mmio.qsel,
-							  mmio.vqdev->vqs[mmio.qsel].qnum,
-							  mmio.vqdev->vqs[mmio.qsel].qalign,
-							  false, // weak_barriers
-							  (void *)(mmio.vqdev->vqs[mmio.qsel].pfn * mmio.vqdev->vqs[mmio.qsel].qalign),
-							  NULL, NULL, // callbacks
- 							  mmio.vqdev->vqs[mmio.qsel].name);
-
- 					I think the only reason to do this is so that you have the right type to use the
- 					wait_for_vq_desc function on the queue. But there is a lot of magic going on here...
-
- 					well, that, and when we eventually do want to do no-exit io, we'll need to make sure
- 					that our queue uses exactly the same layout in memory as Linux's, because that's the
- 					layout Linux's driver will use when it puts stuff in the queues.
-
-
-
-				What our hacked up version of wait_for_vq_desc does:
-				takes a pointer to a virtqueue,
-				a pointer to a scatterlist,
-				a pointer to an out len,
-				and a pointer to an in len
-
-				Note: sometimes I refer to the vring_virtqueue as the vq
-
-				converts the virtqueue to a vring_virtqueue by calling to_vvq with the virtqueue
-				a vring_virtqueue is a wrapper around the virtqueue that has the vring memory layout
-				for the queue, some configuration bools, the head of the free buffer list, the number
-				of (buffers?) added "since the last sync", the last used index "seen", some stuff to
-				"figure out if their kicks are too delayed" and a data pointer (what data idk,
-				it says "Tokens for callbacks.").
-
-				sets uint16 last_avail to the ret of lg_last_avail( the vring_virtqueue ), which
-				is actually just a macro that returns the vring_virtqueue's last_avail_idx.
-
-				sets the in len and out len to 0
-
-				then, while last_avail equals the vring_virtqueue's vring.avail->idx, it spins, continually doing:
-					return 0 if the _vq is broken (_vq is the virtqueue inside the vring_virtqueue)
-					// TODO: What are the conditions where a virtqueue can be broken?
-					*1*
-					clear the VRING_USED_F_NO_NOTIFY bit on the vq->vring.used->flags
-					mb() // memory barrier
-					if (last_avail != vq->vring.avail->idx)
-						set the vq->vring.used->flags VRING_USED_F_NO_NOTIFY bit
-					*2*
-					set the vq->vring.used->flags VRING_USED_F_NO_NOTIFY_BIT
-
-				Note: The original one would trigger_irq(vq) at *1*
-					  and do an eventfd read (thus waiting) at *2*
-
-				So the end result of that while loop is that the VRING_USED_F_NO_NOTIFY bit is
-				set when we finaly exit the loop (unless the virtqueue was broken)
-
-				Then we error if vq->vring.avail->idx - last_avail > vq->vring.num
-				// TODO: Figure out what that error means.
-
-				rmb(); // read memory barrier
-				the purpose of that barrier is to "make sure we read the descriptor number *after*
-				we read the ring update; don't let the cpu or compiler change the order"
-				// TODO: Figure out and document why this is important
-
-				Now comes the real meat of the function.
-
-				first we set head = vq->vring.avail->ring[last_avail % vq->vring.num]
-				then we increment vq->last_avail_idx
-
-				then set the in len and out len to 0 again. I think this is the one that actually matters
-
-				then:
-				max = vq->vring.num;
-				desc = vq->vring.desc;
-				i = head;
-
-				Ah, so it looks like num is maybe like our maxqnum?
-
-				then they check desc[i].flags for VRING_DESC_F_INDIRECT to see if index i
-				is an indirect entry. If it is an indirect entry, then the buffer contains
-				a descriptor table and, after validating that the len of the buffer (i.e. the
-				size of the table) is evenly divisible by the size of a vring_desc, they set
-				`max` to the number of vring_descs that can fit in the buffer. Finally, they
-				check that the desc[i].addr + desc[i].len neither exceeds the limit on guest
-				memory nor wraps around. That memory limit is hardcoded as
-				#define guest_limit ((1ULL<<48)-1)
-
-				Then they have a loop that builds the iov (array of scatterlists), while
-				checking that the addr and len of each desc that it's putting in the scatterlist
-				neither exceeds the limit on guest memory nor wraps around.
-				They also check that no output descriptors come after the input descriptors.
-				// TODO: We'll probably have to do that.
-				It knows to stop building the iov when (i = next_desc(desc, i, max)) != max
-
-				Note: The static unsigned next_desc(struct vring_desc *desc, unsigned int i, unsigned int max)
-				function does the following:
-					return max if the descriptor says it doesn't chain (VRING_DESC_F_NEXT bit set on the desc[i].flags)
-					otherwise set next to desc[i].next
-					wmb() // write memory barrier // TODO: I'm not really sure that this is necessary?
-					check that next is not greater or equal to max (cause error if so)
-					return next
-
-
-				So basically, the goal of our wait_for_vq_desc is to spin until the available index is
-				incremented, and then
-
-				The old one
-
-
-
-
-
-				*/
+				// kick the queue's service thread
+				if (notified_queue->eventfd > 0)
+					eventfd_write(notified_queue->eventfd, 1);
+				else
+					VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+						"You need to provide a valid eventfd on your virtio_vq"
+						" so that it can be kicked when the driver writes to"
+						" QueueNotify.");
 			}
 			break;
 
+		// Interrupt acknowledge
+		// Writing a value with bits set as defined in InterruptStatus to this
+		// register notifies the device that events causing the interrupt have
+		// been handled.
 		case VIRTIO_MMIO_INTERRUPT_ACK:
-		// TODO: It seems like you are supposed to write the same value as in isr
-		//       here to indicate the event causing the interrupt was handled
-		// TODO: Ron was just doing mmio.isr &= ~value, which would clear the isr register,
-		//       if you wrote the right thing... if you didn't you'd have a really messed
-		//       up looking interrupt in there...
-		// QEMU does the same thing as Ron, but then they also call this virtio_update_irq(vdev) function
-		// which calls virtio_notify_vector(vdev, VIRTIO_NO_VECTOR)
-		// which gets the parent bus of the queue, checks if the bus has a notify function, and
-		// then calls the notify function on the bus. I don't think we really want to model a bus yet...
-		/*
-			VIRTIO_NO_VECTOR is 0xffff
-
-			The virtio_update_irq function was added in the "Separate virtio PCI code" commit, back in 2009
-			At the time it looked for an update_irq binding on vdev->binding and called it with vdev->binding_opaque
-			as an argument.
-
-			The question is, why does qemu dive into the irq handler (ultimately) here?
-
-
-		*/
-
-		/*
-			There are only two bits that matter in the interrupt status register
-			0: interrupt because used ring updated in active vq
-			1: interrupt because dev config changed
-
-			the device sets the interrupt status reg
-			the driver acks handling by writing the same flags for the events it handled to the ack reg
-			The spec says that the driver MUST NOT set any of the undefined bits in this value
-			so we need to protect against that.
-
-		*/
-			*value &= 0b11; // only the lower two bits matter, spec says driver MUST NOT set anything else
+			// TODO: Is there anything the device actually has to DO on an
+			//       ack other than clear the acked interrupt bits in isr?
+			if (*value & ~0b11)
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"Attempt to set undefined bits in InterruptACK register."
+					"\n  See virtio-v1.0-cs04 s4.2.2.1 MMIO Device"
+					" Register Layout");
 			mmio_dev->isr &= ~(*value);
 			break;
 
+		// Device status
+		// Writing non-zero values to this register sets the status flags.
+		// Writing zero (0x0) to this register triggers a device reset.
 		case VIRTIO_MMIO_STATUS:
-		// TODO: Ron was doing mmio.status |= value & 0xff;
-		//       why only letting the last byte through?
-		//       I guess this register is only a byte?
-		// TODO: Should we also check the DRIVER_OK bit of the status reg here?
-		//       qemu starts/stops their virtio mmio ioeventfd stuff if the
-		//       VIRTIO_CONFIG_S_DRIVER_OK bit is set/not set
-		// TODO: I guess status is only a byte? Kind of seems that way in the spec...
-			mmio_dev->status = *value & 0xff;
-			if (mmio_dev->status == 0) virtio_mmio_reset(mmio_dev);
+			if (*value == 0)
+				virtio_mmio_reset(mmio_dev);
+			// virtio-v1.0-cs04 s2.1.1. driver must NOT clear a status bit
+			else if (mmio_dev->status & ~(*value)) {
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must not clear any device status bits,"
+					" except as a result of resetting the device."
+					"\n  See virtio-v1.0-cs04 s2.1.1 Device Status Field");
+			}
+			// virtio-v1.0-cs04 s2.1.1. MUST reset before re-init if FAILED set
+			else if (mmio_dev->status & VIRTIO_CONFIG_S_FAILED
+				&&   mmio_dev->status != *value) {
+				// NOTE: This fails if the driver tries to *change* the status
+				//       after the FAILED bit is set. The driver can set the
+				//       same status again all it wants.
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must reset the device after setting the FAILED"
+					" status bit, before attempting to re-initialize "
+					" the device."
+					"\n  See virtio-v1.0-cs04 s2.1.1 Device Status Field");
+			}
+
+			// NOTE: If a bit is not set in value, then at this point it
+			//       CANNOT be set in status either, because if it were
+			//       set in status, we would have just crashed with an
+			//       error due to the attempt to clear a status bit.
+
+			// Now we check that status bits are set in the correct
+			// sequence during device initialization as described
+			// in virtio-v1.0-cs04 s3.1.1 Device Initialization
+
+			else if ((*value & VIRTIO_CONFIG_S_DRIVER)
+			          && !(*value & VIRTIO_CONFIG_S_ACKNOWLEDGE)) {
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"Tried to set DRIVER status bit before setting"
+					" ACKNOWLEDGE feature bit."
+					"\n  See virtio-v1.0-cs04 s3.1.1 Device Initialization");
+			}
+			else if ((*value & VIRTIO_CONFIG_S_FEATURES_OK)
+			         && !((*value & VIRTIO_CONFIG_S_ACKNOWLEDGE)
+				           && (*value & VIRTIO_CONFIG_S_DRIVER))) {
+				// All those parentheses... Lisp must be making a comeback.
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"Tried to set FEATURES_OK status bit before setting both"
+					" ACKNOWLEDGE and DRIVER status bits."
+					"\n  See virtio-v1.0-cs04 s3.1.1 Device Initialization");
+			}
+			else if ((*value & VIRTIO_CONFIG_S_DRIVER_OK)
+			         && !((*value & VIRTIO_CONFIG_S_ACKNOWLEDGE)
+				           && (*value & VIRTIO_CONFIG_S_DRIVER)
+				           && (*value & VIRTIO_CONFIG_S_FEATURES_OK))) {
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"Tried to set DRIVER_OK status bit before setting all of"
+					" ACKNOWLEDGE, DRIVER, and FEATURES_OK status bits."
+					"\n  See virtio-v1.0-cs04 s3.1.1 Device Initialization");
+			}
+
+			// NOTE: For now, we allow the driver to set all status bits up
+			//       through FEATURES_OK in one fell swoop. The driver is,
+			//       however, required to re-read FEATURES_OK after setting it
+			//       to be sure that the driver-activated features are a subset
+			//       of those supported by the device, so it must make an
+			//       additional write to set DRIVER_OK.
+
+			else if ((*value & VIRTIO_CONFIG_S_DRIVER_OK)
+			         && !(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)) {
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver may not set FEATURES_OK and DRIVER_OK status"
+					" bits simultaneously."
+					" It must read back FEATURES_OK after setting it to ensure"
+					" that its activated features are supported by the device"
+					" before setting DRIVER_OK."
+					"\n  See virtio-v1.0-cs04 s3.1.1 Device Initialization");
+			}
+			else {
+				// NOTE: Don't set the FEATURES_OK bit unless the driver
+				//       activated a valid subset of the supported features
+				//       prior to attempting to set FEATURES_OK.
+				if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
+				    && (*value & VIRTIO_CONFIG_S_FEATURES_OK)) {
+
+					err = virtio_validate_feat(mmio_dev->vqdev,
+					                           mmio_dev->vqdev->dri_feat);
+
+					if ((mmio_dev->vqdev->dri_feat
+						& ~mmio_dev->vqdev->dev_feat)) {
+						VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+							"The driver did not accept (e.g. activate) a"
+							" subset of the features offered by the device"
+							" prior to attempting to set the FEATURES_OK status"
+							" bit. The bit will remain unset."
+							"\n  See virtio-v1.0-cs04 s3.1.1"
+							" Device Initialization");
+						*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
+					} else if (err) {
+						VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+							"The driver did not accept (e.g. activate) a valid"
+							" combination of the features offered by the"
+							" device prior to attempting to set the FEATURES_OK"
+							" status bit. The bit will remain unset."
+							"\n  See virtio-v1.0-cs04 s3.1.1"
+							" Device Initialization"
+							"\n  Validation Error: %s", err);
+						*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
+					}
+				}
+				// Device status is only a byte wide.
+				mmio_dev->status = *value & 0xff;
+			}
 			break;
 
-// TODO: guest phys should equal host virt... we'll see if this address math works....
-// TODO: test without the casts and see if things blow up...
-		case VIRTIO_MMIO_QUEUE_DESC_LOW: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
-			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr; // assign the new value to the queue desc
+		// Queue's Descriptor Table 64 bit long physical address, low 32
+		case VIRTIO_MMIO_QUEUE_DESC_LOW:
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueDescLow on queue %d,"
+						" which has nonzero QueueReady."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout", mmio_dev->qsel);
+
+				// clear low bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
+				  & ((uint64_t)0xffffffff << 32));
+				// write low bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr | *value);
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 16)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's descriptor table (%p) is"
+						" misaligned. Address should be a multiple of 16."
+						"\n  See virtio-v1.0-cs04 s2.4 Virtqueues");
+
+				// assign the new value to the queue desc
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueDescLow register for invalid"
+					" QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
-		case VIRTIO_MMIO_QUEUE_DESC_HIGH: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
-			                  & ((uint64_t)0xffffffff)); // clear high bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr; // assign the new value to the queue desc
+		// Queue's Descriptor Table 64 bit long physical address, high 32
+		case VIRTIO_MMIO_QUEUE_DESC_HIGH:
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueDescHigh on queue %d,"
+						" which has nonzero QueueReady."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout", mmio_dev->qsel);
+
+				// clear high bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
+				  & ((uint64_t)0xffffffff));
+				// write high bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr
+				                  | ((uint64_t)(*value) << 32));
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 16)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's descriptor table (%p) is"
+						" misaligned. Address should be a multiple of 16."
+						"\n  See virtio-v1.0-cs04 s2.4 Virtqueues");
+
+				// assign the new value to the queue desc
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueDescHigh register for invalid"
+					" QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
-		case VIRTIO_MMIO_QUEUE_AVAIL_LOW: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
-			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr; // assign the new value to the queue avail
+		// Queue's Available Ring 64 bit long physical address, low 32
+		case VIRTIO_MMIO_QUEUE_AVAIL_LOW:
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueAvailLow on queue %d,"
+						" which has nonzero QueueReady."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout", mmio_dev->qsel);
+
+				// clear low bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
+				  & ((uint64_t)0xffffffff << 32));
+				// write low bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr | *value);
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 2)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's available ring (%p) is"
+						" misaligned. Address should be a multiple of 2."
+						"\n  See virtio-v1.0-cs04 s2.4 Virtqueues");
+
+				// assign the new value to the queue avail
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueAvailLow register for invalid"
+					" QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
-		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
-			                  & ((uint64_t)0xffffffff)); // clear high bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr; // assign the new value to the queue avail
+		// Queue's Available Ring 64 bit long physical address, high 32
+		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH:
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueAvailHigh on queue %d,"
+						" which has nonzero QueueReady."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout", mmio_dev->qsel);
+
+				// clear high bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
+				 &  ((uint64_t)0xffffffff));
+				// write high bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr
+				                  | ((uint64_t)(*value) << 32));
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 2)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's available ring (%p) is"
+						" misaligned. Address should be a multiple of 2."
+						"\n  See virtio-v1.0-cs04 s2.4 Virtqueues");
+
+				// assign the new value to the queue avail
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueAvailHigh register for invalid"
+					" QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
-		case VIRTIO_MMIO_QUEUE_USED_LOW: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
-			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr; // assign the new value to the queue used
+		// Queue's Used Ring 64 bit long physical address, low 32
+		case VIRTIO_MMIO_QUEUE_USED_LOW:
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueUsedLow on queue %d,"
+						" which has nonzero QueueReady."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout", mmio_dev->qsel);
+
+				// clear low bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
+				  & ((uint64_t)0xffffffff << 32));
+				// write low bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr | *value);
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 4)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's used ring (%p) is"
+						" misaligned. Address should be a multiple of 4."
+						"\n  See virtio-v1.0-cs04 s2.4 Virtqueues");
+
+				// assign the new value to the queue used
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueUsedLow register for invalid"
+					" QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
-		case VIRTIO_MMIO_QUEUE_USED_HIGH: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
-			                  & ((uint64_t)0xffffffff)); // clear high bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr; // assign the new value to the queue used
+		// Queue's Used Ring 64 bit long physical address, high 32
+		case VIRTIO_MMIO_QUEUE_USED_HIGH:
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueUsedHigh on queue %d,"
+						" which has nonzero QueueReady."
+						"\n  See virtio-v1.0-cs04 s4.2.2.2 MMIO Device"
+						" Register Layout", mmio_dev->qsel);
+
+				// clear high bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
+				  & ((uint64_t)0xffffffff));
+				// write high bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr
+				                  | ((uint64_t)(*value) << 32));
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 4)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's used ring (%p) is"
+						" misaligned. Address should be a multiple of 4."
+						"\n  See virtio-v1.0-cs04 s2.4 Virtqueues");
+
+				// assign the new value to the queue used
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueUsedHigh register for invalid"
+					" QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
 		// Read-only register offsets:
@@ -553,16 +1042,15 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		case VIRTIO_MMIO_INTERRUPT_STATUS:
 		case VIRTIO_MMIO_CONFIG_GENERATION:
 			// Write to read-only register
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to write read-only device register offset 0x%x.",
+				offset);
 			break;
 		default:
 			// Bad register offset
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to write invalid device register offset 0x%x.",
+				offset);
 			break;
 	}
 }
-
-
-void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev)
-{
-	mmio_dev->isr |= VIRTIO_MMIO_INT_VRING;
-}
-

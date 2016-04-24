@@ -1,46 +1,80 @@
+/*
+ * Copyright (c) 2016 Google Inc.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of
+ * the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/*
+ * Please note: Our virtio implementation is inspired by QEMU's
+ * virtio-mmio.c and Linux's lguest.c. Both of QEMU's virtio-mmio.c
+ * and Linux's lguest.c are released under the GNU General Public
+ * License version 2 or later.
+ * QEMU's virtio-mmio.c is copyright (c) 2011 Linaro Limited
+ * Linux's lguest.c was written by Rusty Russel
+ */
+
 #pragma once
-/* Core virtio definitions for Akaros
-	For example: The definitions of our virtqueue and
-	             generic virtio device structures.
-*/
 
 #include <stdint.h>
+#include <err.h>
+#include <pthread.h>
+#include <sys/uio.h>
 #include <vmm/virtio_ring.h>
 
- // TODO: move comments to a block above each struct so that it's easy to quickly
- //       read all the fields on the struct
+// This file contains the core virtio structs, functions, and macros for Akaros
 
-// TODO: This "struct vq" is all ours. So I can clean it up and change it around however I want (Mike)
-// A vq defines on queue attached to a device. It has a function, started as a thread;
-// an arg, for arbitrary use; qnum, which is an indicator of how much memory is given
-// to the queue; a pointer to the thread that gets started when the queue is notified;
-// a physical frame number, which is process virtual to the vmm; an isr (not used yet);
-// status; and a pointer to the virtio struct.
-// struct vqdev;
-struct vq {
+// Print errors caused by incorrect driver behavior
+#define VIRTIO_DRI_ERRX(dev, fmt, ...) \
+	errx(1, "\n  %s:%d\n  Virtio Device: %s: Error, driver behavior.\n  "\
+		fmt, __FILE__, __LINE__, (dev)->name, ## __VA_ARGS__)
+
+// Print warnings caused by incorrect driver behavior
+#define VIRTIO_DRI_WARNX(dev, fmt, ...) \
+	warnx("\n  %s:%d\n  Virtio Device: %s: Warning, driver behavior.\n  "\
+		fmt, __FILE__, __LINE__, (dev)->name, ## __VA_ARGS__)
+
+// Print errors caused by incorrect device behavior
+#define VIRTIO_DEV_ERRX(dev, fmt, ...) \
+	errx(1, "\n  %s:%d\n  Virtio Device: %s: Error, device behavior.\n  "\
+		fmt, __FILE__, __LINE__, (dev)->name, ## __VA_ARGS__)
+
+// Print warnings caused by incorrect device behavior
+#define VIRTIO_DEV_WARNX(dev, fmt, ...) \
+	warnx("\n  %s:%d\n  Virtio Device: %s: Warning, device behavior.\n  "\
+		fmt, __FILE__, __LINE__, (dev)->name, ## __VA_ARGS__)
+
+
+
+struct virtio_vq {
 	// The name of the vq e.g. for printing errors
 	char *name;
 
 	// The vqdev that contains this vq
-	struct vqdev *vqdev;
+	struct virtio_vq_dev *vqdev;
 
-	// The vring contains pointers to the descriptor table and available and used rings
+	// The vring contains pointers to the descriptor table and available and
+	// used rings as well as the number of elements in the queue.
 	struct vring vring;
 
-	// TODO: Figure out exactly what maxqnum is for
-	int maxqnum; // how many things the q gets? or something.
-
-	// TODO: comment this
-	uint32_t isr; // not used yet but ... // TODO: If it's not used then what is it!?
-
-	// TODO: comment this
-	uint32_t status;
+	// The maximum number of elements in the queue that the device is ready to
+	// process. Reads from the register corresponding to this value return 0x0
+	// if the queue is not available. A queue's size is always a power of 2.
+	int qnum_max;
 
 	// The driver writes 0x1 to qready to tell the device
 	// that it can execute requests from this vq
-	uint32_t qready; // TODO do we prevent access to the queue before this is written?
+	uint32_t qready;
 
-	// The last vq.vring.avail->idx that the service function saw while processing the queue
+	// The last vq.vring.avail->idx that the service function saw while
+	// processing the queue
 	uint16_t last_avail;
 
 	// The service function that processes buffers for this queue
@@ -49,13 +83,11 @@ struct vq {
 	// The thread that the service function is running in
 	pthread_t srv_th;
 
-	// We write eventfd to wake up the service function; it blocks on eventfd read
+	// Write eventfd to wake up the service function; it blocks on eventfd read
 	int eventfd;
 };
 
-// a vqdev has a name; magic number; features ( we MUST have features);
-// and an array of vqs.
-struct vqdev {
+struct virtio_vq_dev {
 	// The name of the device e.g. for printing errors
 	char *name;
 
@@ -68,13 +100,46 @@ struct vqdev {
 	// The features supported by the driver (these are set by the guest)
 	uint64_t dri_feat;
 
-	// The VIRTIO transport that contains this vqdev. i.e. struct virtio_mmio_dev
+	// The number of virtio_vqs on the device
+	uint32_t num_vqs;
+
+	// A pointer to the device-specific config space
+	void *cfg;
+
+	// A pointer to a default device-specific config space
+	// If set, cfg_sz bytes, starting at cfg_d, will be
+	// copied to cfg.
+	void *cfg_d;
+
+	// The size, in bytes, of the device-specific config space
+	// Used by the device to bounds-check driver access
+	uint64_t cfg_sz;
+
+	// The virtio transport dev that contains this vqdev
+	// i.e. struct virtio_mmio_dev
 	void *transport_dev;
 
-	// The number of vqs on this device
-	int numvqs;
-
-	// Flexible array of vqs on this device TODO document that you usually just init this with a struct literal
-	struct vq vqs[]; // TODO: QEMU macros a fixed-length in here, that they just make the max number of queues
-	// TODO: Is there a way to do a compile time check that someone actually put as many vqs in here as they said they would?
+	// Flexible array of vqs on this device
+	struct virtio_vq vqs[];
 };
+
+// Validates memory regions provided by the guest's virtio driver
+void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
+                           uint32_t size, char *file, uint32_t line);
+
+// Adds descriptor chain to the used ring of the vq
+// Based on add_used in Linux's lguest.c
+void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len);
+
+// Waits for the next available descriptor chain and writes the addresses
+// and sizes of the buffers it describes to an iovec to make them easy to use.
+// Based on wait_for_vq_desc in Linux lguest.c
+uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
+                            uint32_t *olen, uint32_t *ilen);
+
+// Returns NULL if the features are valid, otherwise returns
+// an error string describing what part of validation failed
+// We pass the vqdev instead of just the dev_id in case we
+// also want to validate the device-specific config space.
+// feat is the feature vector that you want to validate for the vqdev
+const char *virtio_validate_feat(struct virtio_vq_dev *vqdev, uint64_t feat);
