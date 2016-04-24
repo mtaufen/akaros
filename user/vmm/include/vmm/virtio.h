@@ -24,9 +24,6 @@ struct virtio_vq {
 	int maxqnum; // how many things the q gets? or something.
 
 	// TODO: comment this
-	uint32_t isr; // not used yet but ... // TODO: If it's not used then what is it!?
-
-	// TODO: comment this
 	uint32_t status;
 
 	// The driver writes 0x1 to qready to tell the device
