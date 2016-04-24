@@ -34,10 +34,6 @@
 
 #pragma once
 
-#include <pthread.h>
-#include <vmm/sched.h>
-#include <vmm/virtio.h>
-
 /*
  * Control registers
  */
@@ -139,6 +135,10 @@
 #define VIRTIO_MMIO_INT_VRING		(1 << 0)
 #define VIRTIO_MMIO_INT_CONFIG		(1 << 1)
 
+// NOTE: Stuff below this line was added for Akaros
+
+#include <stdint.h>
+#include <vmm/virtio.h>
 
 // The mmio device that wraps the vqdev. Holds things like the base
 // address of the device, the device status register, queue selectors, etc.
@@ -168,7 +168,7 @@ struct virtio_mmio_dev {
 	uint32_t cfg_gen;
 
 	// The generic vq device contained by this mmio transport
-	struct vqdev *vqdev;
+	struct virtio_vqdev *vqdev;
 
 	// TODO: What to do about the device-specific configuration space?
 };
@@ -181,5 +181,3 @@ void     virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint
 
 // Sets the VIRTIO_MMIO_INT_VRING bit in the interrupt status register for the device
 void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev);
-
-// Mike: This file is from Linux. Ok.

@@ -21,10 +21,13 @@
 #include <ros/vmm.h>
 #include <parlib/uthread.h>
 #include <vmm/linux_bootparam.h>
+
 #include <vmm/virtio.h>
 #include <vmm/virtio_mmio.h>
+
 #include <vmm/virtio_ids.h>
 #include <vmm/virtio_config.h>
+
 #include <vmm/sched.h>
 
 #include <sys/eventfd.h>
@@ -393,7 +396,7 @@ uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max)
 
 // TODO: Rename this fn
 // Based on wait_for_vq_desc in Linux lguest.c
-uint32_t next_avail_vq_desc(struct vq *vq, struct iovec iov[], // TODO: scatterlist is just some type sitting in our virtio.h. We can clean this up.
+uint32_t next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[], // TODO: scatterlist is just some type sitting in our virtio.h. We can clean this up.
                             uint32_t *olen, uint32_t *ilen)
 {
 	uint32_t i, head, max;
@@ -555,7 +558,7 @@ uint32_t next_avail_vq_desc(struct vq *vq, struct iovec iov[], // TODO: scatterl
 // TODO: Rename this to something more succinct and understandable!
 // Based on the add_used function in lguest.c
 // Adds descriptor chain to the used ring of the vq
-static void add_used_desc(struct vq *vq, uint32_t head, uint32_t len)
+static void add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
 {
 	// NOTE: len is the total length of the descriptor chain (in bytes)
 	//       that was written to.
@@ -571,7 +574,7 @@ static void add_used_desc(struct vq *vq, uint32_t head, uint32_t len)
 
 static void *cons_receiveq_fn(void *_vq) // host -> guest
 {
-	struct vq *vq = _vq;
+	struct virtio_vq *vq = _vq;
 	uint32_t head;
 	uint32_t olen, ilen;
 	uint32_t i, j;
@@ -630,7 +633,7 @@ static void *cons_receiveq_fn(void *_vq) // host -> guest
 
 static void *cons_transmitq_fn(void *_vq) // guest -> host
 {
-	struct vq *vq = _vq;
+	struct virtio_vq *vq = _vq;
 	uint32_t head;
 	uint32_t olen, ilen;
 	uint32_t i, j;
@@ -693,7 +696,7 @@ The driver MUST NOT put a device-writable buffer in a transmitq.
 
 */
 
-static struct vqdev cons_vqdev = {
+static struct virtio_vq_dev cons_vqdev = {
 	name: "console",
 	dev_id: VIRTIO_ID_CONSOLE,
 	dev_feat: (uint64_t)1 << VIRTIO_F_VERSION_1,
@@ -733,7 +736,7 @@ static void * netsend(void *arg)
 // ^ since the queues will have the same names in the vm and the host we'll just
 // make the functions have the same name too.
 
-static struct vqdev vq_net_dev = {
+static struct virtio_vq_dev vq_net_dev = {
 	name: "net",
 	dev_id: VIRTIO_ID_NET,
 	dev_feat: VIRTIO_F_VERSION_1,

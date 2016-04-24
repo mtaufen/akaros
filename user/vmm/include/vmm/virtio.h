@@ -1,28 +1,21 @@
 #pragma once
+
 /* Core virtio definitions for Akaros
 	For example: The definitions of our virtqueue and
 	             generic virtio device structures.
 */
 
 #include <stdint.h>
+#include <pthread.h>
 #include <vmm/virtio_ring.h>
 
- // TODO: move comments to a block above each struct so that it's easy to quickly
- //       read all the fields on the struct
-
-// TODO: This "struct vq" is all ours. So I can clean it up and change it around however I want (Mike)
-// A vq defines on queue attached to a device. It has a function, started as a thread;
-// an arg, for arbitrary use; qnum, which is an indicator of how much memory is given
-// to the queue; a pointer to the thread that gets started when the queue is notified;
-// a physical frame number, which is process virtual to the vmm; an isr (not used yet);
-// status; and a pointer to the virtio struct.
-// struct vqdev;
-struct vq {
+struct virtio_vq_dev;
+struct virtio_vq {
 	// The name of the vq e.g. for printing errors
 	char *name;
 
 	// The vqdev that contains this vq
-	struct vqdev *vqdev;
+	struct virtio_vq_dev *vqdev;
 
 	// The vring contains pointers to the descriptor table and available and used rings
 	struct vring vring;
@@ -53,9 +46,7 @@ struct vq {
 	int eventfd;
 };
 
-// a vqdev has a name; magic number; features ( we MUST have features);
-// and an array of vqs.
-struct vqdev {
+struct virtio_vq_dev {
 	// The name of the device e.g. for printing errors
 	char *name;
 
@@ -68,13 +59,13 @@ struct vqdev {
 	// The features supported by the driver (these are set by the guest)
 	uint64_t dri_feat;
 
-	// The VIRTIO transport that contains this vqdev. i.e. struct virtio_mmio_dev
+	// The virtio transport dev that contains this vqdev. i.e. struct virtio_mmio_dev
 	void *transport_dev;
 
 	// The number of vqs on this device
 	int numvqs;
 
 	// Flexible array of vqs on this device TODO document that you usually just init this with a struct literal
-	struct vq vqs[]; // TODO: QEMU macros a fixed-length in here, that they just make the max number of queues
+	struct virtio_vq vqs[]; // TODO: QEMU macros a fixed-length in here, that they just make the max number of queues
 	// TODO: Is there a way to do a compile time check that someone actually put as many vqs in here as they said they would?
 };

@@ -1,8 +1,10 @@
+// NOTE:
 // Mike's implementation of virtio mmio device.
 // Mike's additions are Copyright (c) 2016 Google, Inc.
 
 // Partially based on the qemu implementation (although that was for the legacy spec)
 // That implementation was licensed as:
+
 /*
  * Virtio MMIO bindings
  *
@@ -215,7 +217,7 @@ operations again. See also 2.3.
 void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
-	struct vq *notified_queue;
+	struct virtio_vq *notified_queue;
 	void *temp_ptr; // for facilitating bitwise ops on pointers
 
 	// printf("in wr reg\n");
