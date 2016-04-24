@@ -223,10 +223,10 @@ struct virtio_mmio_dev {
 	// we save the same value here as we report to guest via kernel cmd line
 	uint64_t addr;
 
-	// Reads from vqdev.device_feat are performed starting at bit 32 * device_feat_sel
+	// Reads from vqdev.dev_feat are performed starting at bit 32 * dev_feat_sel
 	uint32_t dev_feat_sel;
 
-	// Writes to vqdev.driver_feat are performed starting at bit 32 * driver_feat_sel
+	// Writes to vqdev.dri_feat are performed starting at bit 32 * dri_feat_sel
 	uint32_t dri_feat_sel;
 
 	// Reads and writes to queue-specific registers target vqdev->vqs[qsel]
