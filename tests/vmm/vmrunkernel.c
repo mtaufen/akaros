@@ -17,6 +17,7 @@
 #include <vmm/acpi/acpi.h>
 #include <vmm/acpi/vmm_simple_dsdt.h>
 #include <ros/arch/mmu.h>
+#include <ros/arch/membar.h>
 #include <ros/vmm.h>
 #include <parlib/uthread.h>
 #include <vmm/linux_bootparam.h>
