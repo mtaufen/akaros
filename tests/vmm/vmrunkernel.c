@@ -1249,7 +1249,7 @@ int main(int argc, char **argv)
 				// Lucky for us the various virtio ops are well-defined.
 				//virtio_mmio((struct guest_thread *)vm_thread, gpa, regx, regp, store);
 				if (store) {
-					virtio_mmio_wr_reg(&cons_mmio_dev, gpa, regp);
+					virtio_mmio_wr_reg(&cons_mmio_dev, gpa, (uint32_t *)regp);
 				}
 				else {
 					*regp = virtio_mmio_rd_reg(&cons_mmio_dev, gpa);
