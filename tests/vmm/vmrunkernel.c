@@ -723,12 +723,6 @@ static void *cons_receiveq_fn(struct vq *vq) // host -> guest
 
 
 		/*
-			Fill buffers with reads from stdin until you read less than the
-			len of a buffer or you run out of buffers. Then you either can't
-			read any more, or you read everything there was to read.
-
-			Then return the buffers to the guest.
-
 			TODO: Does the driver give us empty buffers? Does it even matter?
 			      i.e. we might get junk, but it's junk from the guest so giving
 			      the same junk back shouldn't be a problem. Unless it then thinks
@@ -737,16 +731,6 @@ static void *cons_receiveq_fn(struct vq *vq) // host -> guest
 			      to see if providing clean buffers is the responsibility of the
 			      device or the driver.
 		*/
-		// for (i = 0; i < ilen; ++i) {
-		// 	num_read = read(0, dvec[i].v, dvec[i].length);
-		// 	if (num_read < 0) {
-		// 		exit(0); // Some error happened. TODO: Better error handling here
-		// 	}
-		// 	else if (num_read != dvec[i].length) {
-		// 		// Read less than the buffer or the buffer was 0 length
-		// 		break;
-		// 	}
-		// }
 
 
 		// readv from stdin as much as we can (either to end of buffers or end of input)
@@ -766,7 +750,6 @@ static void *cons_receiveq_fn(struct vq *vq) // host -> guest
 		set_posted_interrupt(0xE5);
 		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
 
-
 	}
 }
 
@@ -781,11 +764,6 @@ static void *cons_transmitq_fn(struct vq *vq) // guest -> host
 	//       for our mmio devices and use that here.(I think that's what qemu does)
 	static struct iovec iov[1024];
 
-
-	// how do I know what virtqueue I'm for? I use the arg, I guess.
-
-	//printf("cons_transmitq_fn called.\n\targ: %p, qname: %s\n", vq, vq->name);
-fprintf(stderr, "\nlaunched the console transmitq thread\n");
 	while(1) {
 
 	// TODO: Look at the lguest.c implementation of this as well, they do things
@@ -805,18 +783,9 @@ fprintf(stderr, "\nlaunched the console transmitq thread\n");
 				printf("%c", ((char *)iov[i].iov_base)[j]);
 			}
 		}
+		fflush(stdout);
 
 		// 3: Add all the buffers to the used ring:
-
-		// TODO: Can probably make this only use ilen now that olen > 0 is an error
-		// for (i = olen; i < olen + ilen; ++i) {
-		// 	// clear the input buffers so they are empty when the guest gets them back
-		// 	// TODO: Is just setting .length to 0 enough to avoid leaking info through the .v?
-		// 	//       should look into that, for now we clear both.
-		// 	iov[i].iov_len = 0;
-		// 	iov[i].iov_base = NULL;
-		// }
-
 		// Pass 0 because we wrote nothing.
 		add_used_iov(vq, head, 0);
 
@@ -828,31 +797,6 @@ fprintf(stderr, "\nlaunched the console transmitq thread\n");
 		set_posted_interrupt(0xE5);
 		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
 	}
-
-	/*
-Basics, abridged from osdev (http://wiki.osdev.org/Virtio#Communication):
-
-To send from guest to device (I use device and host interchangeably):
-the guest fills a buffer and then adds that buffer to the buffers array in the vq desc
-then the index of the buffer is written to the next available position in the available ring buffer
-and the available index is incremented
-then the guest writes the index of the vq to the queue notify register
-then the host processes the buffer and adds the buffer index to the used ring, and increments the
-used index field. If interrupts are enabled, the host will also set the low bit of the interrupt
-status register and will trigger an interrupt.
-
-To receive from device in guest:
-the guest adds an empty buffer to the buffers array with the write-only flag set
-then the guest adds the index of the buffer to the available ring and increments the available index
-then the guest writes the virtual queue index to the queue notify register
-when the device has filled the buffer, the device will write the buffer index to the used ring
-and increment the used index. If interrupts are enabled, the device will set the low  bit of the
-interrupt status field, and will trigger an interrupt.
-
-Once a buffer has been placed in the used ring, it may be added back to the available ring, or discarded
-
-	*/
-
 }
 
 
