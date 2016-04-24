@@ -24,10 +24,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE. */
-#include <linux/types.h>
-#include <linux/virtio_types.h>
-#include <linux/virtio_ids.h>
-#include <linux/virtio_config.h>
+#include <stdint.h>
+#include <vmm/virtio_ids.h>
+#include <vmm/virtio_config.h>
 
 /* The feature bitmap for virtio balloon */
 #define VIRTIO_BALLOON_F_MUST_TELL_HOST	0 /* Tell before reclaiming pages */
@@ -39,9 +38,9 @@
 
 struct virtio_balloon_config {
 	/* Number of pages host wants Guest to give up. */
-	__u32 num_pages;
+	uint32_t num_pages;
 	/* Number of pages we've actually got in balloon. */
-	__u32 actual;
+	uint32_t actual;
 };
 
 #define VIRTIO_BALLOON_S_SWAP_IN  0   /* Amount of memory swapped in */
@@ -76,6 +75,6 @@ struct virtio_balloon_config {
  * without the packed attribute.
  */
 struct virtio_balloon_stat {
-	__virtio16 tag;
-	__virtio64 val;
+	uint16_t tag;
+	uint64_t val;
 } __attribute__((packed));
