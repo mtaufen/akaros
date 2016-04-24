@@ -30,10 +30,10 @@
  * Copyright (C) Amit Shah <amit.shah@redhat.com>, 2009, 2010, 2011
  */
 #pragma once
-#include <linux/types.h>
-#include <linux/virtio_types.h>
-#include <linux/virtio_ids.h>
-#include <linux/virtio_config.h>
+#include <stdint.h>
+#include <vmm/virtio_types.h>
+#include <vmm/virtio_ids.h>
+#include <vmm/virtio_config.h>
 
 /* Feature bits */
 #define VIRTIO_CONSOLE_F_SIZE	0	/* Does host provide console size? */
@@ -44,13 +44,13 @@
 
 struct virtio_console_config {
 	/* colums of the screens */
-	__u16 cols;
+	uint16_t cols;
 	/* rows of the screens */
-	__u16 rows;
+	uint16_t rows;
 	/* max. number of ports this device can hold */
-	__u32 max_nr_ports;
+	uint32_t max_nr_ports;
 	/* emergency write register */
-	__u32 emerg_wr;
+	uint32_t emerg_wr;
 } __attribute__((packed));
 
 /*

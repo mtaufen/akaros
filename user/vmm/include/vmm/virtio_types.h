@@ -30,7 +30,7 @@
  * Copyright (C) 2014 Red Hat, Inc.
  * Author: Michael S. Tsirkin <mst@redhat.com>
  */
-#include <linux/types.h>
+#include <stdint.h>
 
 /*
  * __virtio{16,32,64} have the following meaning:
@@ -38,6 +38,6 @@
  * - __le{16,32,64} for standard-compliant virtio devices
  */
 
-typedef __u16 __bitwise__ __virtio16;
-typedef __u32 __bitwise__ __virtio32;
-typedef __u64 __bitwise__ __virtio64;
+typedef uint16_t __virtio16;
+typedef uint32_t __virtio32;
+typedef uint64_t __virtio64;

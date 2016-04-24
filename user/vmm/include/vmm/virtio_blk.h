@@ -24,10 +24,10 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE. */
-#include <linux/types.h>
-#include <linux/virtio_ids.h>
-#include <linux/virtio_config.h>
-#include <linux/virtio_types.h>
+#include <stdint.h>
+#include <vmm/virtio_ids.h>
+#include <vmm/virtio_config.h>
+#include <vmm/virtio_types.h>
 
 /* Feature bits */
 #define VIRTIO_BLK_F_SIZE_MAX	1	/* Indicates maximum segment size */
@@ -54,37 +54,37 @@
 
 struct virtio_blk_config {
 	/* The capacity (in 512-byte sectors). */
-	__u64 capacity;
+	uint64_t capacity;
 	/* The maximum segment size (if VIRTIO_BLK_F_SIZE_MAX) */
-	__u32 size_max;
+	uint32_t size_max;
 	/* The maximum number of segments (if VIRTIO_BLK_F_SEG_MAX) */
-	__u32 seg_max;
+	uint32_t seg_max;
 	/* geometry of the device (if VIRTIO_BLK_F_GEOMETRY) */
 	struct virtio_blk_geometry {
-		__u16 cylinders;
-		__u8 heads;
-		__u8 sectors;
+		uint16_t cylinders;
+		uint8_t heads;
+		uint8_t sectors;
 	} geometry;
 
 	/* block size of device (if VIRTIO_BLK_F_BLK_SIZE) */
-	__u32 blk_size;
+	uint32_t blk_size;
 
 	/* the next 4 entries are guarded by VIRTIO_BLK_F_TOPOLOGY  */
 	/* exponent for physical block per logical block. */
-	__u8 physical_block_exp;
+	uint8_t physical_block_exp;
 	/* alignment offset in logical blocks. */
-	__u8 alignment_offset;
+	uint8_t alignment_offset;
 	/* minimum I/O size without performance penalty in logical blocks. */
-	__u16 min_io_size;
+	uint16_t min_io_size;
 	/* optimal sustained I/O size in logical blocks. */
-	__u32 opt_io_size;
+	uint32_t opt_io_size;
 
 	/* writeback mode (if VIRTIO_BLK_F_CONFIG_WCE) */
-	__u8 wce;
-	__u8 unused;
+	uint8_t wce;
+	uint8_t unused;
 
 	/* number of vqs, only available when VIRTIO_BLK_F_MQ is set */
-	__u16 num_queues;
+	uint16_t num_queues;
 } __attribute__((packed));
 
 /*
