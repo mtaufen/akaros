@@ -9,7 +9,7 @@
 #include <pthread.h>
 #include <vmm/virtio_ring.h>
 
-struct virtio_vq_dev;
+
 struct virtio_vq {
 	// The name of the vq e.g. for printing errors
 	char *name;

@@ -27,8 +27,8 @@
  */
 
 #include <stdio.h>
-#include <vmm/virtio_mmio.h>
 #include <sys/eventfd.h>
+#include <vmm/virtio_mmio.h>
 
 
 #define VIRT_MAGIC 0x74726976 /* 'virt' */

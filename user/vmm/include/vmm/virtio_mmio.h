@@ -168,7 +168,7 @@ struct virtio_mmio_dev {
 	uint32_t cfg_gen;
 
 	// The generic vq device contained by this mmio transport
-	struct virtio_vqdev *vqdev;
+	struct virtio_vq_dev *vqdev;
 
 	// TODO: What to do about the device-specific configuration space?
 };
