@@ -157,7 +157,6 @@ struct vq {
 
 	pthread_t thread;
 	/* filled in by virtio probing. */
-	uint64_t pfn;
 	uint32_t isr; // not used yet but ... // TODO: If it's not used then what is it!?
 	uint32_t status;
 
