@@ -359,132 +359,11 @@ void *timer_thread(void *arg)
 	fprintf(stderr, "SENDING TIMER\n");
 }
 
-int debug_cons = 1;
 
-void *consout(void *arg) // guest -> host
-{
-	char *line, *consline, *outline;
-	static struct scatterlist out[] = { {NULL, sizeof(outline)}, };
-	static struct scatterlist in[] = { {NULL, sizeof(line)}, };
-	static struct scatterlist iov[32];
-	struct virtio_threadarg *a = arg;
-	static unsigned int inlen, outlen, conslen;
-	struct virtqueue *v = a->arg->virtio;
-	fprintf(stderr, "talk thread ..\n");
-	uint16_t head, gaveit = 0, gotitback = 0;
-	uint32_t vv;
-	int i;
-	int num;
 
-	if (debug_cons) {
-		fprintf(stderr, "----------------------- TT a %p\n", a);
-		fprintf(stderr, "talk thread ttargs %x v %x\n", a, v);
-	}
-
-	for(num = 0;;num++) {
-		//int debug = 1;
-		/* host: use any buffers we should have been sent. */
-		head = wait_for_vq_desc(v, iov, &outlen, &inlen);
-		if (debug_cons)
-			fprintf(stderr, "CCC: vq desc head %d, gaveit %d gotitback %d\n", head, gaveit, gotitback);
-		for(i = 0; debug_cons && i < outlen + inlen; i++)
-			fprintf(stderr, "CCC: v[%d/%d] v %p len %d\n", i, outlen + inlen, iov[i].v, iov[i].length);
-		/* host: if we got an output buffer, just output it. */
-		for(i = 0; i < outlen; i++) {
-			num++;
-			int j;
-			if (debug_cons) {
-				fprintf(stderr, "CCC: IOV length is %d\n", iov[i].length);
-			}
-			for (j = 0; j < iov[i].length; j++)
-				printf("%c", ((char *)iov[i].v)[j]);
-		}
-		fflush(stdout);
-		if (debug_cons)
-			fprintf(stderr, "CCC: outlen is %d; inlen is %d\n", outlen, inlen);
-		/* host: fill in the writeable buffers. */
-		/* why we're getting these I don't know. */
-		for (i = outlen; i < outlen + inlen; i++) {
-			if (debug_cons) fprintf(stderr, "CCC: send back empty writeable");
-			iov[i].length = 0;
-		}
-		if (debug_cons) fprintf(stderr, "CCC: call add_used\n");
-		/* host: now ack that we used them all. */
-		add_used(v, head, outlen+inlen);
-		if (debug_cons) fprintf(stderr, "CCC: DONE call add_used\n");
-	}
-	fprintf(stderr, "All done\n");
-	return NULL;
-}
-
-// FIXME.
+// FIXME. probably remove consdata TODO
 volatile int consdata = 0;
 static struct virtio_mmio_dev cons_mmio_dev;
-
-void *consin(void *arg) // host -> guest
-{
-	struct virtio_threadarg *a = arg;
-	char *line, *outline;
-	static char consline[128];
-	static struct scatterlist iov[32];
-	static struct scatterlist out[] = { {NULL, sizeof(outline)}, };
-	static struct scatterlist in[] = { {NULL, sizeof(line)}, };
-
-	static unsigned int inlen, outlen, conslen;
-	struct virtqueue *v = a->arg->virtio;
-	fprintf(stderr, "consin thread ..\n");
-	uint16_t head, gaveit = 0, gotitback = 0;
-	uint32_t vv;
-	int i;
-	int num;
-	//char c[1];
-
-	if (debug_cons) fprintf(stderr, "Spin on console being read, print num queues, halt\n");
-
-	for(num = 0;! quit;num++) {
-		//int debug = 1;
-		/* host: use any buffers we should have been sent. */
-		head = wait_for_vq_desc(v, iov, &outlen, &inlen);
-		if (debug_cons)
-			fprintf(stderr, "vq desc head %d, gaveit %d gotitback %d\n", head, gaveit, gotitback);
-		for(i = 0; debug_cons && i < outlen + inlen; i++)
-			fprintf(stderr, "v[%d/%d] v %p len %d\n", i, outlen + inlen, iov[i].v, iov[i].length);
-		if (debug_cons)
-			fprintf(stderr, "outlen is %d; inlen is %d\n", outlen, inlen);
-		/* host: fill in the writeable buffers. */
-		for (i = outlen; i < outlen + inlen; i++) {
-			/* host: read a line. */
-			memset(consline, 0, 128);
-			if (read(0, consline, 1) < 0) {
-				exit(0);
-			}
-			if (debug_cons) fprintf(stderr, "CONSIN: GOT A LINE:%s:\n", consline);
-			if (debug_cons) fprintf(stderr, "CONSIN: OUTLEN:%d:\n", outlen);
-			if (strlen(consline) < 3 && consline[0] == 'q' ) {
-				quit = 1;
-				break;
-			}
-
-			// TODO: Do we even know if the buffer is big enough for this thing?
-			memmove(iov[i].v, consline, strlen(consline)+ 1);
-			iov[i].length = strlen(consline) + 1;
-		}
-		if (debug_cons) fprintf(stderr, "call add_used\n");
-		/* host: now ack that we used them all. */
-		add_used(v, head, outlen+inlen);
-		/* turn off consdata - the IRQ injection isn't right */
-		//consdata = 1;
-		if (debug_cons) fprintf(stderr, "DONE call add_used\n");
-
-		// Send spurious for testing (Gan)
-		set_posted_interrupt(0xE5);
-		virtio_mmio_set_vring_irq(&cons_mmio_dev);
-
-		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
-	}
-	fprintf(stderr, "All done\n");
-	return NULL;
-}
 
 // For traversing the linked list of descriptors
 // Also based on Linux's lguest.c
@@ -733,6 +612,7 @@ static void *cons_receiveq_fn(struct vq *vq) // host -> guest
 		*/
 
 
+		// TODO: Some sort of console abort (e.g. type q and enter to quit)
 		// readv from stdin as much as we can (either to end of buffers or end of input)
 		num_read = readv(0, iov, ilen);
 		if (num_read < 0) {
