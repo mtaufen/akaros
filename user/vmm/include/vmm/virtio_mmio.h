@@ -228,18 +228,9 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa);
 void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value);
 void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev);
 
-// better name for this.... it sets the vqdev pointer on the virtio_mmio_dev
+// TODO better name for this.... it sets the vqdev pointer on the virtio_mmio_dev
 // this function does two tiny things... basically unnecessary
 // would it be a good hook for "I plugged this thing in" though?
 void virtio_mmio_register_vqdev(struct virtio_mmio_dev *mmio_dev, struct vqdev *vqdev, uint64_t mmio_ba);
-
-
-
-void dumpvirtio_mmio(FILE *f, uint64_t gpa);
-void register_virtio_mmio(struct vqdev *v, uint64_t virtio_base);
-int virtio_mmio(struct guest_thread *vm_thread, uint64_t gpa, int destreg,
-                uint64_t *regp, int store);
-//void virtio_mmio_set_vring_irq(void);
-
 
 // Mike: This file is from Linux. Ok.
