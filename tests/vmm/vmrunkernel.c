@@ -553,7 +553,8 @@ uint32_t next_avail_vq_desc(struct vq *vq, struct iovec iov[], // TODO: scatterl
 
 // TODO: Rename this to something more succinct and understandable!
 // Based on the add_used function in lguest.c
-static void add_used_iov(struct vq *vq, uint32_t head, uint32_t len)
+// Adds descriptor chain to the used ring of the vq
+static void add_used_desc(struct vq *vq, uint32_t head, uint32_t len)
 {
 	// NOTE: len is the total length of the descriptor chain (in bytes)
 	//       that was written to.
@@ -564,16 +565,7 @@ static void add_used_iov(struct vq *vq, uint32_t head, uint32_t len)
 	// TODO: what does this wmb actually end up compiling as now that we're out of linux?
 	wmb(); // So the values get written to the used buffer before we update idx
 	vq->vring.used->idx++;
-	// vq->pending_used++; // lguest would watch this one to see if it needed to trigger an interrupt
 }
-
-// NOTE: The handlers ("f" on the vq structs) will always end up getting a kick
-//       from the Linux virtio mmio driver when the queue is initially
-//       set up by the driver if we call then in the VIRTIO_MMIO_QUEUE_NOTIFY
-//       write reg handler. We call them there for now, because I'm trying
-//       to get virtio mmio v2 working the way the spec says it does before
-//       we deviate and go to the more efficient separate, spinning,
-//       io threads model.
 
 
 static void *cons_receiveq_fn(void *_vq) // host -> guest
@@ -620,8 +612,8 @@ static void *cons_receiveq_fn(void *_vq) // host -> guest
 			exit(0); // some error happened TODO better error handling here
 		}
 
-		// You pass the number of bytes written to add_used_iov
-		add_used_iov(vq, head, num_read);
+		// You pass the number of bytes written to add_used_desc
+		add_used_desc(vq, head, num_read);
 
 		// set the low bit of the interrupt status register and trigger an interrupt
 		virtio_mmio_set_vring_irq(vq->vqdev->transport_dev); // just assuming that the mmio transport was used for now
@@ -670,7 +662,7 @@ static void *cons_transmitq_fn(void *_vq) // guest -> host
 
 		// 3: Add all the buffers to the used ring:
 		// Pass 0 because we wrote nothing.
-		add_used_iov(vq, head, 0);
+		add_used_desc(vq, head, 0);
 
 		// 4. set the low bit of the interrupt status register and trigger an interrupt
 		virtio_mmio_set_vring_irq(vq->vqdev->transport_dev); // just assuming that the mmio transport was used for now
