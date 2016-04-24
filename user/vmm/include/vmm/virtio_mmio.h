@@ -247,17 +247,13 @@ struct virtio_mmio_dev {
 	// TODO: What to do about the device-specific configuration space?
 };
 
-
-// TODO: Document how to use these functions!
-// gpa is guest physical address
-// these are my "version 2" functions
+// virtio_mmio_rd_reg and virtio_mmio_wr_reg are used to process the guest's driver's
+// reads and writes to the mmio device registers. gpa is the guest physical address
+// that the driver tried to write to; this is used to calculate the target register
 uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa);
-void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value);
-void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev);
+void     virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value);
 
-// TODO better name for this.... it sets the vqdev pointer on the virtio_mmio_dev
-// this function does two tiny things... basically unnecessary
-// would it be a good hook for "I plugged this thing in" though?
-void virtio_mmio_register_vqdev(struct virtio_mmio_dev *mmio_dev, struct vqdev *vqdev, uint64_t mmio_ba);
+// Sets the VIRTIO_MMIO_INT_VRING bit in the interrupt status register for the device
+void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev);
 
 // Mike: This file is from Linux. Ok.

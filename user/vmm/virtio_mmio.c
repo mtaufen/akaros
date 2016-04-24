@@ -35,15 +35,10 @@
 
 #define VIRT_MMIO_VENDOR 0x52414B41 /* 'AKAR' */
 
-
-// Just need to implement read, write, and set irq,
- // maybe register_virtio_mmio... but that's pretty trivial (2 lines)
-
 static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 {
 	// TODO: Actually reset the device!
 }
-
 
 // TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
 
