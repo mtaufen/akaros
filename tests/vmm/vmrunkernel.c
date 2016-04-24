@@ -27,6 +27,7 @@
 #include <vmm/sched.h>
 
 #include <sys/eventfd.h>
+#include <sys/uio.h>
 
 struct vmctl vmctl;
 struct vmm_gpcore_init gpci;
@@ -464,6 +465,7 @@ void *consin(void *arg) // host -> guest
 				break;
 			}
 
+			// TODO: Do we even know if the buffer is big enough for this thing?
 			memmove(iov[i].v, consline, strlen(consline)+ 1);
 			iov[i].length = strlen(consline) + 1;
 		}
@@ -511,7 +513,7 @@ uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max)
 
 // TODO: Rename this fn
 // Based on wait_for_vq_desc in Linux lguest.c
-uint32_t next_avail_vq_desc(struct vq *vq, struct scatterlist dvec[], // TODO: scatterlist is just some type sitting in our virtio.h. We can clean this up.
+uint32_t next_avail_vq_desc(struct vq *vq, struct iovec iov[], // TODO: scatterlist is just some type sitting in our virtio.h. We can clean this up.
                             uint32_t *olen, uint32_t *ilen)
 {
 	uint32_t i, head, max;
@@ -614,7 +616,7 @@ uint32_t next_avail_vq_desc(struct vq *vq, struct scatterlist dvec[], // TODO: s
 			//       descriptor for an indirect table. So we ignore it.
 
 			max = desc[i].len / sizeof(struct vring_desc);
-			desc = desc[i].addr; // TODO: check that this pointer isn't goofy
+			desc = (void *)desc[i].addr; // TODO: check that this pointer isn't goofy
 			i = 0;
 
 
@@ -639,8 +641,8 @@ uint32_t next_avail_vq_desc(struct vq *vq, struct scatterlist dvec[], // TODO: s
 		// TODO: And, you know, we ought to check the pointers on these descriptors too!
 		// TODO: You better make sure you pass a big enough scatterlist to this function
 		//       for whatever the eventual value of *olen + *ilen will be!
-		dvec[*olen + *ilen].length = desc[i].len;
-		dvec[*olen + *ilen].v = desc[i].addr; // NOTE: .v is basically our scatterlist/iovec's iov_base
+		iov[*olen + *ilen].iov_len = desc[i].len;
+		iov[*olen + *ilen].iov_base = (void *)desc[i].addr; // NOTE: .v is basically our scatterlist/iovec's iov_base
 
 		if (desc[i].flags & VRING_DESC_F_WRITE) {
 			// input descriptor, increment *ilen
@@ -672,8 +674,12 @@ uint32_t next_avail_vq_desc(struct vq *vq, struct scatterlist dvec[], // TODO: s
 
 // TODO: Rename this to something more succinct and understandable!
 // Based on the add_used function in lguest.c
-static void add_used_dvec(struct vq *vq, uint32_t head, uint32_t len)
+static void add_used_iov(struct vq *vq, uint32_t head, uint32_t len)
 {
+	// NOTE: len is the total length of the descriptor chain (in bytes)
+	//       that was written to.
+	//       So you should pass 0 if you didn't write anything, and pass
+	//       the number of bytes you wrote otherwise.
 	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].id = head;
 	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].len = len;
 	// TODO: what does this wmb actually end up compiling as now that we're out of linux?
@@ -693,8 +699,75 @@ static void add_used_dvec(struct vq *vq, uint32_t head, uint32_t len)
 
 static void *cons_receiveq_fn(struct vq *vq) // host -> guest
 {
+	uint32_t head;
+	uint32_t olen, ilen;
+	uint32_t i, j;
+	// TODO: scatterlist dvec. I think we need this to be big enough for the max buffers in a queue.
+	//       But I think that is set by the driver... for now I just made it really big. Don't really
+	//       want to dynamically allocate due to overhead. Maybe we'll arbitrarily define a MaxQueueNum
+	//       for our mmio devices and use that here.(I think that's what qemu does)
+	static struct iovec iov[1024];
+	int num_read;
+
 	printf("cons_receiveq_fn called.\n\targ: %p, qname: %s\n", vq, vq->name);
 
+	// NOTE: This will wait in 2 places: reading from stdin and reading from eventfd in next_avail_vq_desc
+	while(1) {
+		head = next_avail_vq_desc(vq, iov, &olen, &ilen);
+
+		if (olen) {
+			// TODO: Make this an actual error!
+			printf("cons_receiveq ERROR: output buffers in console input queue!\n");
+		}
+
+
+
+		/*
+			Fill buffers with reads from stdin until you read less than the
+			len of a buffer or you run out of buffers. Then you either can't
+			read any more, or you read everything there was to read.
+
+			Then return the buffers to the guest.
+
+			TODO: Does the driver give us empty buffers? Does it even matter?
+			      i.e. we might get junk, but it's junk from the guest so giving
+			      the same junk back shouldn't be a problem. Unless it then thinks
+			      that that junk is input that it needs to process. So maybe
+			      we should clear it just in case? TODO: Check the virtio spec
+			      to see if providing clean buffers is the responsibility of the
+			      device or the driver.
+		*/
+		// for (i = 0; i < ilen; ++i) {
+		// 	num_read = read(0, dvec[i].v, dvec[i].length);
+		// 	if (num_read < 0) {
+		// 		exit(0); // Some error happened. TODO: Better error handling here
+		// 	}
+		// 	else if (num_read != dvec[i].length) {
+		// 		// Read less than the buffer or the buffer was 0 length
+		// 		break;
+		// 	}
+		// }
+
+
+		// readv from stdin as much as we can (either to end of buffers or end of input)
+		num_read = readv(0, iov, ilen);
+		if (num_read < 0) {
+			exit(0); // some error happened TODO better error handling here
+		}
+
+		// You pass the number of bytes written to add_used_iov
+		add_used_iov(vq, head, num_read);
+
+		// set the low bit of the interrupt status register and trigger an interrupt
+		virtio_mmio_set_vring_irq(vq->vqdev->transport_dev); // just assuming that the mmio transport was used for now
+		// I think this is how we send the guest an interrupt. Definitely the way we have to do it
+		// concurrently. Not sure if doing this during an exit will mess things up...
+		// also not sure if 0xE5 is the right one to send... TODO
+		set_posted_interrupt(0xE5);
+		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
+
+
+	}
 }
 
 static void *cons_transmitq_fn(struct vq *vq) // guest -> host
@@ -706,102 +779,57 @@ static void *cons_transmitq_fn(struct vq *vq) // guest -> host
 	//       But I think that is set by the driver... for now I just made it really big. Don't really
 	//       want to dynamically allocate due to overhead. Maybe we'll arbitrarily define a MaxQueueNum
 	//       for our mmio devices and use that here.(I think that's what qemu does)
-	static struct scatterlist dvec[1024];
+	static struct iovec iov[1024];
 
 
 	// how do I know what virtqueue I'm for? I use the arg, I guess.
 
 	//printf("cons_transmitq_fn called.\n\targ: %p, qname: %s\n", vq, vq->name);
 fprintf(stderr, "\nlaunched the console transmitq thread\n");
-while(1) {
-	// 1. get the buffers:
-	head = next_avail_vq_desc(vq, dvec, &olen, &ilen);
+	while(1) {
 
-	// 2. process the buffers:
-	for (i = 0; i < olen; ++i) {
-		for (j = 0; j < dvec[i].length; ++j) {
-			printf("%c", ((char *)dvec[i].v)[j]);
+	// TODO: Look at the lguest.c implementation of this as well, they do things
+	//       slightly differently and I want to double check my work!
+
+		// 1. get the buffers:
+		head = next_avail_vq_desc(vq, iov, &olen, &ilen);
+
+		if (ilen) {
+			// TODO: Make this an actual error!
+			printf("cons_transmitq ERROR: input buffers in console output queue!\n");
 		}
+
+		// 2. process the buffers:
+		for (i = 0; i < olen; ++i) {
+			for (j = 0; j < iov[i].iov_len; ++j) {
+				printf("%c", ((char *)iov[i].iov_base)[j]);
+			}
+		}
+
+		// 3: Add all the buffers to the used ring:
+
+		// TODO: Can probably make this only use ilen now that olen > 0 is an error
+		// for (i = olen; i < olen + ilen; ++i) {
+		// 	// clear the input buffers so they are empty when the guest gets them back
+		// 	// TODO: Is just setting .length to 0 enough to avoid leaking info through the .v?
+		// 	//       should look into that, for now we clear both.
+		// 	iov[i].iov_len = 0;
+		// 	iov[i].iov_base = NULL;
+		// }
+
+		// Pass 0 because we wrote nothing.
+		add_used_iov(vq, head, 0);
+
+		// 4. set the low bit of the interrupt status register and trigger an interrupt
+		virtio_mmio_set_vring_irq(vq->vqdev->transport_dev); // just assuming that the mmio transport was used for now
+		// I think this is how we send the guest an interrupt. Definitely the way we have to do it
+		// concurrently. Not sure if doing this during an exit will mess things up...
+		// also not sure if 0xE5 is the right one to send... TODO
+		set_posted_interrupt(0xE5);
+		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
 	}
 
-	// 3: clear any input buffers and add all the buffers to the used ring:
-	for (i = olen; i < olen + ilen; ++i) {
-		// clear the input buffers so they are empty when the guest gets them back
-		// TODO: Is just setting .length to 0 enough to avoid leaking info through the .v?
-		//       should look into that, for now we clear both.
-		dvec[i].length = 0;
-		dvec[i].v = NULL;
-	}
-	add_used_dvec(vq, head, olen + ilen);
-
-	// 4. set the low bit of the interrupt status register and trigger an interrupt
-	virtio_mmio_set_vring_irq(vq->vqdev->transport_dev); // just assuming that the mmio transport was used for now
-	// I think this is how we send the guest an interrupt. Definitely the way we have to do it
-	// concurrently. Not sure if doing this during an exit will mess things up...
-	// also not sure if 0xE5 is the right one to send...
-	set_posted_interrupt(0xE5);
-	ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
-}
-
-
-	// 1. process the buffer
-	// 2. add it to the used ring and increment the used index field
-	// 3. set the low bit of the interrupt status register and trigger an interrupt
-
-
-
-	// TODO: What consout needs to do:
-	// need to know what queue I'm associated with. Best to do that through arg,
-	// so we can easily move the handlers around if we want.
-
 	/*
-	My first scan of the original consout function in vmrunkernel:
-
-	getting kicked (right now that is the same as being called, because
-	we only call in VIRTIO_MMIO_QUEU_NOTIFY at the moment) tells us that
-	there is new stuff in the queue to process
-
-	then we do a wait_for_vq_desc on a vq (v)
-	which gives us an inlen and an outlen, a pointer to a scatterlist (iov)
-
-	then we iterate from 0 to outlen-1 over the iov and iterate from
-	0 to length on each buffer in the iov and print each index in each
-	of those buffers as a char
-
-				for(i = 0; i < outlen; i++) {
-					num++;
-					int j;
-					if (debug_cons) {
-						fprintf(stderr, "CCC: IOV length is %d\n", iov[i].length);
-					}
-					for (j = 0; j < iov[i].length; j++)
-						printf("%c", ((char *)iov[i].v)[j]);
-				}
-
-	then we fflush(stdout)
-
-	then we iterate from outlen to outlen+inlen-1 over the iov and set
-	the length of each of those buffers to 0
-	This is apparently to "send back [an] empty writeable"
-
-	then we add_used(v, head, outlen+inlen) (i.e. put the virtqueue in the used ring)
-
-	and then it would typically loop back to waiting on the vq again
-	*/
-
-	/*
-	How does my first scan track with what the virtio spec says about the console device,
-	and with what the osdev people say about virtio in general?
-
-
-	Virtio spec says that you do this to process new stuff in a queue:
-
-
-
-
-
-
-
 Basics, abridged from osdev (http://wiki.osdev.org/Virtio#Communication):
 
 To send from guest to device (I use device and host interchangeably):
@@ -824,8 +852,6 @@ interrupt status field, and will trigger an interrupt.
 Once a buffer has been placed in the used ring, it may be added back to the available ring, or discarded
 
 	*/
-
-
 
 }
 
@@ -1308,9 +1334,21 @@ int main(int argc, char **argv)
 		cons_mmio_dev.base_address = virtio_mmio_base;
 		cons_mmio_dev.vqdev = &cons_vqdev;
 
-		// Create the eventfd and launch the service threads for the console
+		// Create the eventfds and launch the service threads for the console
 		// TODO: Do this in a better place!
-		//cons_mmio_dev.vqdev->vqs[0].eventfd =
+		cons_mmio_dev.vqdev->vqs[0].eventfd = eventfd(0, 0); // TODO: Look into "semaphore mode"
+		fprintf(stderr, "eventfd is: %d\n", cons_mmio_dev.vqdev->vqs[0].eventfd);
+		if (pthread_create(&cons_mmio_dev.vqdev->vqs[0].thread,
+			               NULL,
+			               cons_mmio_dev.vqdev->vqs[0].f,
+			               &cons_mmio_dev.vqdev->vqs[0])) {
+			// service thread creation failed
+			// TODO: Make this an actual error.
+			fprintf(stderr, "pth_create failed for cons_mmio_dev vq 0 (receive)\n");
+		}
+
+
+
 		cons_mmio_dev.vqdev->vqs[1].eventfd = eventfd(0, 0); // TODO: Look into "semaphore mode"
 		fprintf(stderr, "eventfd is: %d\n", cons_mmio_dev.vqdev->vqs[1].eventfd);
 		if (pthread_create(&cons_mmio_dev.vqdev->vqs[1].thread,
