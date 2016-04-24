@@ -142,6 +142,9 @@
  //      I'll convert the types to stuff in stdint when I re-import all these headers from linux
 #include <ros/virtio_ring.h>
 
+ // TODO: move comments to a block above each struct so that it's easy to quickly
+ //       read all the fields on the struct
+
 // TODO: This "struct vq" is all ours. So I can clean it up and change it around however I want (Mike)
 // A vq defines on queue attached to a device. It has a function, started as a thread;
 // an arg, for arbitrary use; qnum, which is an indicator of how much memory is given
@@ -150,49 +153,65 @@
 // status; and a pointer to the virtio struct.
 // struct vqdev;
 struct vq {
+	// The name of the vq e.g. for printing errors
 	char *name;
-	void *(*f)(void *arg); // Start this as a thread when a matching virtio is discovered.
 
+	// The vqdev that contains this vq
+	struct vqdev *vqdev;
+
+	// The vring contains pointers to the descriptor table and available and used rings
+	struct vring vring;
+
+	// TODO: Figure out exactly what maxqnum is for
 	int maxqnum; // how many things the q gets? or something.
 
-	pthread_t thread;
-	/* filled in by virtio probing. */
+	// TODO: comment this
 	uint32_t isr; // not used yet but ... // TODO: If it's not used then what is it!?
+
+	// TODO: comment this
 	uint32_t status;
 
-	struct vring vring; // ring of buffers on the vq
+	// The driver writes 0x1 to qready to tell the device
+	// that it can execute requests from this vq
+	uint32_t qready; // TODO do we prevent access to the queue before this is written?
 
-	uint32_t qready;
-
+	// The last vq.vring.avail->idx that the service function saw while processing the queue
 	uint16_t last_avail;
 
-	int eventfd; // We write to the eventfd to kick the queue; the queue's service fn (f) will block on eventfd read
+	// The service function that processes buffers for this queue
+	void *(*srv_fn)(void *arg);
 
-	struct vqdev *vqdev; // The vqdev that contains this vq
+	// The thread that the service function is running in
+	pthread_t srv_th;
 
+	// We write eventfd to wake up the service function; it blocks on eventfd read
+	int eventfd;
 };
 
 // a vqdev has a name; magic number; features ( we MUST have features);
 // and an array of vqs.
 struct vqdev {
-	/* Set up usually as a static initializer */
+	// The name of the device e.g. for printing errors
 	char *name;
-	uint32_t dev; // e.g. VIRTIO_ID_CONSOLE);
-	uint64_t device_features;
-	uint64_t driver_features;
+
+	// The type of the device e.g. VIRTIO_ID_CONSOLE for a console device
+	uint32_t dev_id;
+
+	// The features supported by this device
+	uint64_t dev_feat;
+
+	// The features supported by the driver (these are set by the guest)
+	uint64_t dri_feat;
+
+	// The VIRTIO transport that contains this vqdev. i.e. struct virtio_mmio_dev
+	void *transport_dev;
+
+	// The number of vqs on this device
 	int numvqs;
-	void *transport_dev; // The VIRTIO transport that contains this vqdev. i.e. struct virtio_mmio_dev
+
+	// Flexible array of vqs on this device TODO document that you usually just init this with a struct literal
 	struct vq vqs[]; // TODO: QEMU macros a fixed-length in here, that they just make the max number of queues
 	// TODO: Is there a way to do a compile time check that someone actually put as many vqs in here as they said they would?
-};
-
-
-
-/* This struct is passed to a virtio thread when it is started. It includes
- * needed info and the vqdev arg. This seems overkill but we may need to add to it.
- */
-struct virtio_threadarg {
-	struct vq *arg;
 };
 
 // The mmio device that wraps the vqdev. Holds things like the base
@@ -200,22 +219,36 @@ struct virtio_threadarg {
 // TODO: Remove fields that I just shim out or don't need, or that are already on the vqdev
 // this is a NON LEGACY DEVICE!
 struct virtio_mmio_dev {
-	uint64_t base_address;
+	// The base address of the virtio mmio device
+	// we save the same value here as we report to guest via kernel cmd line
+	uint64_t addr;
 
-	uint32_t device_features_sel;
-	uint32_t driver_features_sel;
-	uint32_t queue_sel; // is this actually 32 bits? definitely not any bigger in the spec (next offest 4 bytes away)
-	// Stuff like queue num max, etc is on the vq.
-	// TODO: Change some of the names on the vq so that they match the virtio spec
-	uint32_t int_status; // InterruptStatus
-	uint32_t status; // Status
-	uint32_t cfg_gen; //ConfigGeneration, used to check that access to device-specific config space was atomic
+	// Reads from vqdev.device_feat are performed starting at bit 32 * device_feat_sel
+	uint32_t dev_feat_sel;
 
+	// Writes to vqdev.driver_feat are performed starting at bit 32 * driver_feat_sel
+	uint32_t dri_feat_sel;
+
+	// Reads and writes to queue-specific registers target vqdev->vqs[qsel]
+	uint32_t qsel;
+
+	// Interrupt status register
+	uint32_t isr;
+
+	// Status register for the device
+	uint32_t status;
+
+	// ConfigGeneration, used to check that access to device-specific config space was atomic
+	uint32_t cfg_gen;
+
+	// The generic vq device contained by this mmio transport
 	struct vqdev *vqdev;
+
 	// TODO: What to do about the device-specific configuration space?
 };
 
 
+// TODO: Document how to use these functions!
 // gpa is guest physical address
 // these are my "version 2" functions
 uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa);

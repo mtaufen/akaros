@@ -702,21 +702,21 @@ The driver MUST NOT put a device-writable buffer in a transmitq.
 
 static struct vqdev cons_vqdev = {
 	name: "console",
-	dev: VIRTIO_ID_CONSOLE,
-	device_features: (uint64_t)1 << VIRTIO_F_VERSION_1, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
+	dev_id: VIRTIO_ID_CONSOLE,
+	dev_feat: (uint64_t)1 << VIRTIO_F_VERSION_1,
 	numvqs: 2,
 	transport_dev: &cons_mmio_dev,
 	vqs: {
 			{
 				name: "cons_receiveq (host dev to guest driver)",
 				maxqnum: 64,
-				f: cons_receiveq_fn,
+				srv_fn: cons_receiveq_fn,
 				vqdev: &cons_vqdev
 			},
 			{
 				name: "cons_transmitq (guest driver to host dev)",
 				maxqnum: 64,
-				f: cons_transmitq_fn,
+				srv_fn: cons_transmitq_fn,
 				vqdev: &cons_vqdev
 			},
 		}
@@ -742,12 +742,12 @@ static void * netsend(void *arg)
 
 static struct vqdev vq_net_dev = {
 	name: "net",
-	dev: VIRTIO_ID_NET,
-	device_features: VIRTIO_F_VERSION_1,
+	dev_id: VIRTIO_ID_NET,
+	dev_feat: VIRTIO_F_VERSION_1,
 	numvqs: 2,
 	vqs: {
-			{name: "netrecv", maxqnum: 64, f: netrecv}, // queue 0 is the console dev receiveq
-			{name: "netsend", maxqnum: 64, f: netsend}, // queue 1 is the console dev transmitq
+			{name: "netrecv", maxqnum: 64, srv_fn: netrecv}, // queue 0 is the console dev receiveq
+			{name: "netsend", maxqnum: 64, srv_fn: netsend}, // queue 1 is the console dev transmitq
 		}
 };
 
@@ -1157,16 +1157,16 @@ int main(int argc, char **argv)
 	if (mcp) {
 		/* set up virtio bits, which depend on threads being enabled. */
 		//register_virtio_mmio(&cons_vqdev, virtio_mmio_base);
-		cons_mmio_dev.base_address = virtio_mmio_base;
+		cons_mmio_dev.addr = virtio_mmio_base;
 		cons_mmio_dev.vqdev = &cons_vqdev;
 
 		// Create the eventfds and launch the service threads for the console
 		// TODO: Do this in a better place!
 		cons_mmio_dev.vqdev->vqs[0].eventfd = eventfd(0, 0); // TODO: Look into "semaphore mode"
 		fprintf(stderr, "eventfd is: %d\n", cons_mmio_dev.vqdev->vqs[0].eventfd);
-		if (pthread_create(&cons_mmio_dev.vqdev->vqs[0].thread,
+		if (pthread_create(&cons_mmio_dev.vqdev->vqs[0].srv_th,
 			               NULL,
-			               cons_mmio_dev.vqdev->vqs[0].f,
+			               cons_mmio_dev.vqdev->vqs[0].srv_fn,
 			               &cons_mmio_dev.vqdev->vqs[0])) {
 			// service thread creation failed
 			// TODO: Make this an actual error.
@@ -1177,9 +1177,9 @@ int main(int argc, char **argv)
 
 		cons_mmio_dev.vqdev->vqs[1].eventfd = eventfd(0, 0); // TODO: Look into "semaphore mode"
 		fprintf(stderr, "eventfd is: %d\n", cons_mmio_dev.vqdev->vqs[1].eventfd);
-		if (pthread_create(&cons_mmio_dev.vqdev->vqs[1].thread,
+		if (pthread_create(&cons_mmio_dev.vqdev->vqs[1].srv_th,
 			               NULL,
-			               cons_mmio_dev.vqdev->vqs[1].f,
+			               cons_mmio_dev.vqdev->vqs[1].srv_fn,
 			               &cons_mmio_dev.vqdev->vqs[1])) {
 			// service thread creation failed
 			// TODO: Make this an actual error.

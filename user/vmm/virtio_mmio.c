@@ -50,7 +50,7 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 // Reads are ALWAYS 32 bit at a time
 uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 {
-	uint64_t offset = gpa - mmio_dev->base_address;
+	uint64_t offset = gpa - mmio_dev->addr;
 
 	// TODO: Are there any more static fields to return here in a non-legacy device?
 	// TODO: Is there a use case where you would want to read registers from the
@@ -107,7 +107,7 @@ system memory map with placeholder devices at static, well known addresses,
 assigning functions to them depending on user’s needs.
 */
 		case VIRTIO_MMIO_DEVICE_ID:
-			return mmio_dev->vqdev->dev;
+			return mmio_dev->vqdev->dev_id;
 /*
 Virtio Subsystem Vendor ID
 */
@@ -122,9 +122,9 @@ bits 0 to 31 if DeviceFeaturesSel is set to 0 and features bits 32 to 63 if
 DeviceFeaturesSel is set to 1. Also see 2.2 Feature Bits.
 */
 		case VIRTIO_MMIO_DEVICE_FEATURES:
-			if (mmio_dev->device_features_sel) // high 32 bits requested
-				return mmio_dev->vqdev->device_features >> 32;
-			return mmio_dev->vqdev->device_features; // low 32 bits requested
+			if (mmio_dev->dev_feat_sel) // high 32 bits requested
+				return mmio_dev->vqdev->dev_feat >> 32;
+			return mmio_dev->vqdev->dev_feat; // low 32 bits requested
 /*
 Maximum virtual queue size
 Reading from the register returns the maximum size (number of elements) of the queue
@@ -136,16 +136,16 @@ to the queue selected by writing to QueueSel.
 			// TODO: Exactly what do they mean by "available"?
 			// TODO: For now, we are assuming that if you gave a vqdev
 			//       to the mmio_dev, the queues on it are "available."
-			//       I am going to guard against the queue_sel being
+			//       I am going to guard against the qsel being
 			//       greater than the numvqs on the vq_def, however.
 			//       Since queues above this number don't exist, they
 			//       definitely are not available.
 			// Queue indices start at 0
-		// TODO: Is not checking mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qready
+		// TODO: Is not checking mmio_dev->vqdev->vqs[mmio_dev->qsel].qready
 		//       the right thing to do here?
-			if (mmio_dev->queue_sel >= mmio_dev->vqdev->numvqs)
+			if (mmio_dev->qsel >= mmio_dev->vqdev->numvqs)
 				return 0;
-			return mmio_dev->vqdev->vqs[mmio_dev->queue_sel].maxqnum;
+			return mmio_dev->vqdev->vqs[mmio_dev->qsel].maxqnum;
 /*
 Virtual queue ready bit
 Writing one (0x1) to this register notifies the device that it can execute requests from
@@ -153,9 +153,9 @@ this virtual queue. Reading from this register returns the last value written to
 read and write accesses apply to the queue selected by writing to QueueSel.
 */
 		case VIRTIO_MMIO_QUEUE_READY:
-			if (mmio_dev->queue_sel >= mmio_dev->vqdev->numvqs)
+			if (mmio_dev->qsel >= mmio_dev->vqdev->numvqs)
 				return 0;
-			return mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qready;
+			return mmio_dev->vqdev->vqs[mmio_dev->qsel].qready;
 /*
 Interrupt status
 Reading from this register returns a bit mask of events that caused the
@@ -170,7 +170,7 @@ Configuration Change
          the device has changed.
 */
 		case VIRTIO_MMIO_INTERRUPT_STATUS:
-			return mmio_dev->int_status;
+			return mmio_dev->isr;
 /*
 Device status
 Reading from this register returns the current device status flags. Writing non-zero values
@@ -219,7 +219,7 @@ operations again. See also 2.3.
 // this (TODO) might change when we get to the device-specific config space
 void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value)
 {
-	uint64_t offset = gpa - mmio_dev->base_address;
+	uint64_t offset = gpa - mmio_dev->addr;
 	struct vq *notified_queue;
 	void *temp_ptr; // for facilitating bitwise ops on pointers
 
@@ -247,21 +247,21 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 	// the spec I am referencing is: http://docs.oasis-open.org/virtio/virtio/v1.0/cs04/virtio-v1.0-cs04.html
 	switch(offset) {
 		case VIRTIO_MMIO_DEVICE_FEATURES_SEL:
-			mmio_dev->device_features_sel = *value;
+			mmio_dev->dev_feat_sel = *value;
 			break;
 
 		case VIRTIO_MMIO_DRIVER_FEATURES: // TODO: Test this one, make sure it works right
-			if (mmio_dev->driver_features_sel) {
-				mmio_dev->vqdev->driver_features &= 0xffffffff; // clear high 32 bits
-				mmio_dev->vqdev->driver_features |= ((uint64_t)(*value) << 32); // write high 32 bits
+			if (mmio_dev->dri_feat_sel) {
+				mmio_dev->vqdev->dri_feat &= 0xffffffff; // clear high 32 bits
+				mmio_dev->vqdev->dri_feat |= ((uint64_t)(*value) << 32); // write high 32 bits
 			} else {
-				mmio_dev->vqdev->driver_features &= ((uint64_t)0xffffffff << 32); // clear low 32 bits
-				mmio_dev->vqdev->driver_features |= *value; // write low 32 bits
+				mmio_dev->vqdev->dri_feat &= ((uint64_t)0xffffffff << 32); // clear low 32 bits
+				mmio_dev->vqdev->dri_feat |= *value; // write low 32 bits
 			}
 			break;
 
 		case VIRTIO_MMIO_DRIVER_FEATURES_SEL:
-			mmio_dev->driver_features_sel = *value;
+			mmio_dev->dri_feat_sel = *value;
 			break;
 
 		case VIRTIO_MMIO_QUEUE_SEL:
@@ -271,16 +271,16 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// TODO: If we make sure it's less than numvqs, we probably don't need to bounds-check
 		//       in the read reg function.
 			if (*value < mmio_dev->vqdev->numvqs) {
-				mmio_dev->queue_sel = *value;
+				mmio_dev->qsel = *value;
 			}
 			break;
 
 		case VIRTIO_MMIO_QUEUE_NUM:
-			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.num = *value;
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.num = *value;
 			break;
 
 		case VIRTIO_MMIO_QUEUE_READY:
-			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].qready = *value;
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = *value;
 			break;
 
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
@@ -456,7 +456,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			break;
 
 		case VIRTIO_MMIO_INTERRUPT_ACK:
-		// TODO: It seems like you are supposed to write the same value as in int_status
+		// TODO: It seems like you are supposed to write the same value as in isr
 		//       here to indicate the event causing the interrupt was handled
 		// TODO: Ron was just doing mmio.isr &= ~value, which would clear the isr register,
 		//       if you wrote the right thing... if you didn't you'd have a really messed
@@ -489,7 +489,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 
 		*/
 			*value &= 0b11; // only the lower two bits matter, spec says driver MUST NOT set anything else
-			mmio_dev->int_status &= ~(*value);
+			mmio_dev->isr &= ~(*value);
 			break;
 
 		case VIRTIO_MMIO_STATUS:
@@ -507,45 +507,45 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 // TODO: guest phys should equal host virt... we'll see if this address math works....
 // TODO: test without the casts and see if things blow up...
 		case VIRTIO_MMIO_QUEUE_DESC_LOW: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.desc
+			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
 			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.desc = temp_ptr; // assign the new value to the queue desc
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr; // assign the new value to the queue desc
 			break;
 
 		case VIRTIO_MMIO_QUEUE_DESC_HIGH: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.desc
+			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
 			                  & ((uint64_t)0xffffffff)); // clear high bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
-			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.desc = temp_ptr; // assign the new value to the queue desc
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr; // assign the new value to the queue desc
 			break;
 
 		case VIRTIO_MMIO_QUEUE_AVAIL_LOW: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.avail
+			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
 			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.avail = temp_ptr; // assign the new value to the queue avail
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr; // assign the new value to the queue avail
 			break;
 
 		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.avail
+			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
 			                  & ((uint64_t)0xffffffff)); // clear high bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
-			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.avail = temp_ptr; // assign the new value to the queue avail
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr; // assign the new value to the queue avail
 			break;
 
 		case VIRTIO_MMIO_QUEUE_USED_LOW: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.used
+			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
 			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.used = temp_ptr; // assign the new value to the queue used
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr; // assign the new value to the queue used
 			break;
 
 		case VIRTIO_MMIO_QUEUE_USED_HIGH: // TODO: Test this
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.used
+			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
 			                  & ((uint64_t)0xffffffff)); // clear high bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
-			mmio_dev->vqdev->vqs[mmio_dev->queue_sel].vring.used = temp_ptr; // assign the new value to the queue used
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr; // assign the new value to the queue used
 			break;
 
 		// Read-only register offsets:
@@ -568,6 +568,6 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 
 void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev)
 {
-	mmio_dev->int_status |= VIRTIO_MMIO_INT_VRING;
+	mmio_dev->isr |= VIRTIO_MMIO_INT_VRING;
 }
 
