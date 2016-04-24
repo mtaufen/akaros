@@ -567,7 +567,7 @@ static void add_used_iov(struct vq *vq, uint32_t head, uint32_t len)
 	// vq->pending_used++; // lguest would watch this one to see if it needed to trigger an interrupt
 }
 
-// Note: The handlers ("f" on the vq structs) will always end up getting a kick
+// NOTE: The handlers ("f" on the vq structs) will always end up getting a kick
 //       from the Linux virtio mmio driver when the queue is initially
 //       set up by the driver if we call then in the VIRTIO_MMIO_QUEUE_NOTIFY
 //       write reg handler. We call them there for now, because I'm trying
@@ -707,20 +707,18 @@ static struct vqdev cons_vqdev = {
 				name: "cons_receiveq (host dev to guest driver)",
 				maxqnum: 64,
 				f: cons_receiveq_fn,
-				arg: (void *)0,
 				vqdev: &cons_vqdev
 			},
 			{
 				name: "cons_transmitq (guest driver to host dev)",
 				maxqnum: 64,
 				f: cons_transmitq_fn,
-				arg: (void *)0,
 				vqdev: &cons_vqdev
 			},
 		}
 };
 
-
+// TODO: still have to figure out what maxqnum is...
 
 // Recieve thread (not sure whether it's "vm is recving" or "vmm is recving" yet)
 void * netrecv(void *arg)
@@ -744,8 +742,8 @@ static struct vqdev vq_net_dev = {
 	device_features: VIRTIO_F_VERSION_1,
 	numvqs: 2,
 	vqs: {
-			{name: "netrecv", maxqnum: 64, f: netrecv, arg: (void *)0}, // queue 0 is the console dev receiveq
-			{name: "netsend", maxqnum: 64, f: netsend, arg: (void *)0}, // queue 1 is the console dev transmitq
+			{name: "netrecv", maxqnum: 64, f: netrecv}, // queue 0 is the console dev receiveq
+			{name: "netsend", maxqnum: 64, f: netsend}, // queue 1 is the console dev transmitq
 		}
 };
 

@@ -152,10 +152,9 @@
 struct vq {
 	char *name;
 	void *(*f)(void *arg); // Start this as a thread when a matching virtio is discovered.
-	void *arg;
+
 	int maxqnum; // how many things the q gets? or something.
 
-	int qalign;
 	pthread_t thread;
 	/* filled in by virtio probing. */
 	uint64_t pfn;
