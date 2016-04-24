@@ -154,17 +154,13 @@ struct vq {
 	void *(*f)(void *arg); // Start this as a thread when a matching virtio is discovered.
 	void *arg;
 	int maxqnum; // how many things the q gets? or something.
-	int qnum; // DEPRECATED! TODO: Migrate away from using these; use vring.num instead
+
 	int qalign;
 	pthread_t thread;
 	/* filled in by virtio probing. */
 	uint64_t pfn;
 	uint32_t isr; // not used yet but ... // TODO: If it's not used then what is it!?
 	uint32_t status;
-	uint64_t qdesc; // DEPRECATED! TODO: Migrate away from using these; use vring.desc instead
-	uint64_t qavail; // DEPRECATED! TODO: Migrate away from using these; use vring.avail instead
-	uint64_t qused; // DEPRECATED! TODO: Migrate away from using these; use vring.used instead
-	void *virtio; // TODO: I can probably get rid of this...
 
 	struct vring vring; // ring of buffers on the vq
 
