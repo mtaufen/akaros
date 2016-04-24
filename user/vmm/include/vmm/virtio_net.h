@@ -27,7 +27,6 @@
 #include <stdint.h>
 #include <vmm/virtio_ids.h>
 #include <vmm/virtio_config.h>
-#include <vmm/virtio_types.h>
 #include <linux/if_ether.h> // TODO?
 
 /* The feature bitmap for virtio net */
@@ -91,11 +90,11 @@ struct virtio_net_hdr_v1 {
 #define VIRTIO_NET_HDR_GSO_TCPV6	4	/* GSO frame, IPv6 TCP */
 #define VIRTIO_NET_HDR_GSO_ECN		0x80	/* TCP has ECN set */
 	uint8_t gso_type;
-	__virtio16 hdr_len;	/* Ethernet + IP + tcp/udp hdrs */
-	__virtio16 gso_size;	/* Bytes to append to hdr_len per frame */
-	__virtio16 csum_start;	/* Position to start checksumming from */
-	__virtio16 csum_offset;	/* Offset after that to place checksum */
-	__virtio16 num_buffers;	/* Number of merged rx buffers */
+	uint16_t hdr_len;	/* Ethernet + IP + tcp/udp hdrs */
+	uint16_t gso_size;	/* Bytes to append to hdr_len per frame */
+	uint16_t csum_start;	/* Position to start checksumming from */
+	uint16_t csum_offset;	/* Offset after that to place checksum */
+	uint16_t num_buffers;	/* Number of merged rx buffers */
 };
 
 #ifndef VIRTIO_NET_NO_LEGACY
@@ -108,17 +107,17 @@ struct virtio_net_hdr {
 	uint8_t flags;
 	/* See VIRTIO_NET_HDR_GSO_* */
 	uint8_t gso_type;
-	__virtio16 hdr_len;		/* Ethernet + IP + tcp/udp hdrs */
-	__virtio16 gso_size;		/* Bytes to append to hdr_len per frame */
-	__virtio16 csum_start;	/* Position to start checksumming from */
-	__virtio16 csum_offset;	/* Offset after that to place checksum */
+	uint16_t hdr_len;		/* Ethernet + IP + tcp/udp hdrs */
+	uint16_t gso_size;		/* Bytes to append to hdr_len per frame */
+	uint16_t csum_start;	/* Position to start checksumming from */
+	uint16_t csum_offset;	/* Offset after that to place checksum */
 };
 
 /* This is the version of the header to use when the MRG_RXBUF
  * feature has been negotiated. */
 struct virtio_net_hdr_mrg_rxbuf {
 	struct virtio_net_hdr hdr;
-	__virtio16 num_buffers;	/* Number of merged rx buffers */
+	uint16_t num_buffers;	/* Number of merged rx buffers */
 };
 #endif /* ...VIRTIO_NET_NO_LEGACY */
 
@@ -174,7 +173,7 @@ typedef uint8_t virtio_net_ctrl_ack;
  * VIRTIO_NET_F_CTRL_MAC_ADDR feature is available.
  */
 struct virtio_net_ctrl_mac {
-	__virtio32 entries;
+	uint32_t entries;
 	uint8_t macs[][ETH_ALEN];
 } __attribute__((packed));
 
@@ -218,7 +217,7 @@ struct virtio_net_ctrl_mac {
  * specified.
  */
 struct virtio_net_ctrl_mq {
-	__virtio16 virtqueue_pairs;
+	uint16_t virtqueue_pairs;
 };
 
 #define VIRTIO_NET_CTRL_MQ   4

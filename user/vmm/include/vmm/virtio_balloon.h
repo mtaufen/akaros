@@ -25,7 +25,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE. */
 #include <stdint.h>
-#include <vmm/virtio_types.h>
 #include <vmm/virtio_ids.h>
 #include <vmm/virtio_config.h>
 
@@ -76,6 +75,6 @@ struct virtio_balloon_config {
  * without the packed attribute.
  */
 struct virtio_balloon_stat {
-	__virtio16 tag;
-	__virtio64 val;
+	uint16_t tag;
+	uint64_t val;
 } __attribute__((packed));
