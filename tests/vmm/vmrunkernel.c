@@ -631,6 +631,7 @@ static void *cons_receiveq_fn(struct vq *vq) // host -> guest
 		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
 
 	}
+	return NULL;
 }
 
 static void *cons_transmitq_fn(struct vq *vq) // guest -> host
@@ -677,6 +678,7 @@ static void *cons_transmitq_fn(struct vq *vq) // guest -> host
 		set_posted_interrupt(0xE5);
 		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
 	}
+	return NULL;
 }
 
 
@@ -721,14 +723,14 @@ static struct vqdev cons_vqdev = {
 // TODO: still have to figure out what maxqnum is...
 
 // Recieve thread (not sure whether it's "vm is recving" or "vmm is recving" yet)
-void * netrecv(void *arg)
+static void * netrecv(void *arg)
 {
 	return NULL;
 }
 
 
 // Send thread (not sure whether it's "vm is sending" or "vmm is sending" yet)
-void * netsend(void *arg)
+static void * netsend(void *arg)
 {
 	return NULL;
 }
