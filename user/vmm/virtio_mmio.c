@@ -336,34 +336,15 @@ Writing a value with bits set as defined in InterruptStatus to this register
 notifies the device that events causing the interrupt have been handled.
 */
 		case VIRTIO_MMIO_INTERRUPT_ACK:
-		// TODO: It seems like you are supposed to write the same value as in isr
-		//       here to indicate the event causing the interrupt was handled
-		// TODO: Ron was just doing mmio.isr &= ~value, which would clear the isr register,
-		//       if you wrote the right thing... if you didn't you'd have a really messed
-		//       up looking interrupt in there...
-		// QEMU does the same thing as Ron, but then they also call this virtio_update_irq(vdev) function
-		// which calls virtio_notify_vector(vdev, VIRTIO_NO_VECTOR)
-		// which gets the parent bus of the queue, checks if the bus has a notify function, and
-		// then calls the notify function on the bus. I don't think we really want to model a bus yet...
-		/*
-			VIRTIO_NO_VECTOR is 0xffff
-
-			The virtio_update_irq function was added in the "Separate virtio PCI code" commit, back in 2009
-			At the time it looked for an update_irq binding on vdev->binding and called it with vdev->binding_opaque
-			as an argument.
-
-			The question is, why does qemu dive into the irq handler (ultimately) here?
-
-
-		*/
-
 		/*
 			There are only two bits that matter in the interrupt status register
 			0: interrupt because used ring updated in active vq
 			1: interrupt because device config changed
 
 		*/
-			// TODO: If the driver MUST NOT set anything else, should we fail here?
+			// TODO: Is there anything the device actually has to DO on an interrupt ack
+			//       other than clear the acked interrupt bits in isr?
+			// TODO: If the driver MUST NOT set anything else, should we fail here if they try?
 			*value &= 0b11; // only the lower two bits matter, spec says driver MUST NOT set anything else
 			mmio_dev->isr &= ~(*value);
 			break;
