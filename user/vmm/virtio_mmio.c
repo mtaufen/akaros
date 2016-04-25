@@ -38,7 +38,32 @@
 
 static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 {
-	// TODO: Actually reset the device!
+	// TODO: Audit the reset function!
+	int i;
+
+	if (!mmio_dev->vqdev)
+		return;
+
+	mmio_dev->vqdev->dri_feat = 0;
+	mmio_dev->status = 0;
+	mmio_dev->isr = 0;
+
+	for (i = 0; i < mmio_dev->vqdev.num_vqs; ++i) {
+		// TODO: Should probably kill the handler thread before doing
+		//       anything else. MUST NOT process buffers until reinit!
+		// TODO: If we kill, what does that mean for the eventfds?
+		// TODO: If we kill, where do we launch again in the future?
+		mmio_dev->vqdev->vqs[i].qready = 0;
+		mmio_dev->vqdev->vqs[i].last_avail = 0;
+	}
+
+// TODO: Put parts of the virito spec relating to reset in here
+
+}
+
+static void virtio_mmio_reset_cfg(struct virtio_mmio_dev *mmio_dev)
+{
+	// TODO: Reset the device-specific configuration space.
 }
 
 // TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
