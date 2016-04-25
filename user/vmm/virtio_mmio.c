@@ -26,8 +26,6 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h> // TODO: remove this when all printfs have been replaced with actual errors
-
 #include <sys/eventfd.h>
 #include <vmm/virtio_config.h>
 #include <vmm/virtio_mmio.h>
@@ -222,8 +220,6 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 	struct virtio_vq *notified_queue;
 	void *temp_ptr; // for facilitating bitwise ops on pointers
 
-	// printf("in wr reg\n");
-
 	if (!mmio_dev->vqdev) {
 		// If there is no vqdev on the mmio_dev, we just make all registers write-ignored.
 		// TODO: Is there a case where we want to provide an mmio transport with no vqdev backend?
@@ -326,7 +322,6 @@ Writing a queue index to this register notifies the device that there are new
 buffers to process in the queue.
 */
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
-		// printf("in queue notify\n");
 		// TODO: Ron was just setting the qsel here... is that the right thing?
 		//       The spec is pretty clear that qsel is a different register than this.
 		// TODO: Bounds check the value against num_vqs, first, obviously
