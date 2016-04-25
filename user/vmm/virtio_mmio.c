@@ -26,10 +26,19 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
+#include <stdio.h> // TODO: remove this when all printfs have been replaced with actual errors
+#include <err.h>
 #include <sys/eventfd.h>
+#include <vmm/virtio_config.h>
 #include <vmm/virtio_mmio.h>
 
+// Print errors caused by incorrect driver behavior
+#define DRI_ERRX(dev, fmt, ...) \
+	errx(1, "Virtio Device: %s: Error, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
+
+// Print warnings caused by incorrect driver behavior
+#define DRI_WARNX(dev, fmt, ...) \
+	warnx("Virtio Device: %s: Warning, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
 
 #define VIRT_MAGIC 0x74726976 /* 'virt' */
 
@@ -45,19 +54,13 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 // TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
 // TODO: MAKE SURE WE DO THIS FOR qready!!!!!
 
-// Reads are ALWAYS 32 bit at a time
 uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
 
-	// TODO: Are there any more static fields to return here in a non-legacy device?
-	// TODO: Is there a use case where you would want to read registers from the
-	//       mmio_dev that would make sense even if vqdev->num_vqs == 0?
-/*	If there is no vqdev registered with this mmio device,
-	or if there are no vqs on the device, we
-	return all registers as 0 except for the virtio magic
-	number, the mmio version, and the device vendor.
-	*/
+	// Return 0 for all registers except the magic number,
+	// the mmio version, and the device vendor when either
+	// there is no vqdev or no vqs on the vqdev.
 	if (!mmio_dev->vqdev || mmio_dev->vqdev->num_vqs == 0) {
 		switch(offset) {
 		case VIRTIO_MMIO_MAGIC_VALUE:
@@ -79,12 +82,11 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		//       the read was atomic.
 		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
 		//       and not by these handlers for the driver to touch the device through.
-		printf("ERROR: Tried to read the virtio mmio device configuration space!\n");
+		DRI_ERRX(mmio_dev->vqdev, "Attempt to read the device configuration space! Not yet implemented!");
 	}
 
 
-// TODO: note that some comments are direct from the virtio mmio spec, and some of my notes too.
-	// the spec I am referencing is: http://docs.oasis-open.org/virtio/virtio/v1.0/cs04/virtio-v1.0-cs04.html
+// TODO: the spec I am referencing is: http://docs.oasis-open.org/virtio/virtio/v1.0/cs04/virtio-v1.0-cs04.html
 	switch(offset) {
 /*
 Magic value
@@ -120,8 +122,13 @@ bits 0 to 31 if DeviceFeaturesSel is set to 0 and features bits 32 to 63 if
 DeviceFeaturesSel is set to 1. Also see 2.2 Feature Bits.
 */
 		case VIRTIO_MMIO_DEVICE_FEATURES:
+			if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER))
+				DRI_ERRX(mmio_dev->vqdev,
+				         "Attempt to read device features before setting the DRIVER status bit. See virtio-v1.0-cs04 sec. 3.1.1.");
+
 			if (mmio_dev->dev_feat_sel) // high 32 bits requested
 				return mmio_dev->vqdev->dev_feat >> 32;
+
 			return mmio_dev->vqdev->dev_feat; // low 32 bits requested
 /*
 Maximum virtual queue size
@@ -204,9 +211,11 @@ operations again. See also 2.3.
 		case VIRTIO_MMIO_QUEUE_USED_LOW:
 		case VIRTIO_MMIO_QUEUE_USED_HIGH:
 			// Read of write-only register
+			DRI_WARNX(mmio_dev->vqdev, "Attempt to read write-only device register offset.");
 			return 0;
 		default:
 			// Bad register offset
+			DRI_WARNX(mmio_dev->vqdev, "Attempt to read invalid device register offset.");
 			return 0;
 	}
 
@@ -237,7 +246,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		//       the read was atomic.
 		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
 		//       and not by these handlers for the driver to touch the device through.
-		printf("ERROR: Tried to write the virtio mmio device configuration space!\n");
+		DRI_ERRX(mmio_dev->vqdev, "Attempt to write the device configuration space! Not yet implemented!");
 	}
 
 
