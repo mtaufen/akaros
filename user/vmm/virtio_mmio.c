@@ -257,25 +257,17 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 
 // TODO: note that some comments are direct from the virtio mmio spec, and some of my notes too.
 	// the spec I am referencing is: http://docs.oasis-open.org/virtio/virtio/v1.0/cs04/virtio-v1.0-cs04.html
+	// TODO: Mention Table 4.1 in the spec somewhere. And that the names of registers
+	//       used in the comments are taken from that table.
 	switch(offset) {
 
-/*
-Device (host) features word selection.
-Writing to this register selects a set of 32 device feature bits accessible by reading from DeviceFeatures.
-*/
+		// Device (host) features word selection.
 		case VIRTIO_MMIO_DEVICE_FEATURES_SEL:
 			mmio_dev->dev_feat_sel = *value;
 			break;
 
-/*
-Flags representing device features understood and activated by the driver
-Writing to this register sets 32 consecutive flag bits, the least significant
-bit depending on the last value written to DriverFeaturesSel. Access to this
-register sets bits DriverFeaturesSel ∗ 32 to (DriverFeaturesSel ∗ 32) + 31, eg.
-feature bits 0 to 31 if DriverFeaturesSel is set to 0 and features bits 32 to 63
-if DriverFeaturesSel is set to 1. Also see 2.2 Feature Bits.
-*/
-		case VIRTIO_MMIO_DRIVER_FEATURES: // TODO: Test this one, make sure it works right
+		// Device feature flags activated by the driver
+		case VIRTIO_MMIO_DRIVER_FEATURES:
 			if (mmio_dev->dri_feat_sel) {
 				mmio_dev->vqdev->dri_feat &= 0xffffffff; // clear high 32 bits
 				mmio_dev->vqdev->dri_feat |= ((uint64_t)(*value) << 32); // write high 32 bits
@@ -285,25 +277,17 @@ if DriverFeaturesSel is set to 1. Also see 2.2 Feature Bits.
 			}
 			break;
 
-/*
-Activated (guest) features word selection
-Writing to this register selects a set of 32 activated feature bits accessible by writing to DriverFeatures.
-*/
+		// Activated (guest) features word selection
 		case VIRTIO_MMIO_DRIVER_FEATURES_SEL:
 			mmio_dev->dri_feat_sel = *value;
 			break;
 
-/*
-Virtual queue index
-Writing to this register selects the virtual queue that the following operations
-on QueueNumMax, QueueNum, QueueReady, QueueDescLow, QueueDescHigh, QueueAvailLow,
- QueueAvailHigh, QueueUsedLow and QueueUsedHigh apply to. The index number of the
- first queue is zero (0x0).
-*/
+		// Virtual queue index
+		// Selects the virtual queue that QueueNumMax, QueueNum, QueueReady,
+		// QueueDescLow, QueueDescHigh, QueueAvailLow, QueueAvailHigh,
+		// QueueUsedLow and QueueUsedHigh apply to. The index number of the
+ 		// first queue is zero (0x0).
 		case VIRTIO_MMIO_QUEUE_SEL:
-		// TODO: For now, if the value is above the number of vqs, we just won't set it.
-		//       This may or may not be the right thing to do. QEMU just decides not to set
-		//       it if it is greater than or equal to 1024 (their VIRTIO_QUEUE_MAX macro)
 		// TODO: If we make sure it's less than num_vqs, we probably don't need to bounds-check
 		//       in the read reg function.
 			if (*value < mmio_dev->vqdev->num_vqs) {
@@ -311,152 +295,115 @@ on QueueNumMax, QueueNum, QueueReady, QueueDescLow, QueueDescHigh, QueueAvailLow
 			}
 			break;
 
-/*
-Virtual queue size
-Queue size is the number of elements in the queue, therefore in each of the
-Descriptor Table, the Available Ring and the Used Ring. Writing to this
-register notifies the device what size of the queue the driver will use.
-This applies to the queue selected by writing to QueueSel.
-*/
+		// Virtual queue size
+		// Queue size is the number of elements in the queue, thus in the
+		// Descriptor Table, the Available Ring and the Used Ring. Writes
+		// notify the device what size queue the driver will use.
+		// This applies to the queue selected by writing to QueueSel.
 		case VIRTIO_MMIO_QUEUE_NUM:
 			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.num = *value;
 			break;
 
-/*
-Virtual queue ready bit
-Writing one (0x1) to this register notifies the device that it can execute
-requests from this virtual queue. Reading from this register returns the last
-value written to it. Both read and write accesses apply to the queue selected
-by writing to QueueSel.
-*/
+		// Virtual queue ready bit
+		// Writing one (0x1) to this register notifies the device that it can
+		// execute requests from the virtual queue selected by QueueSel.
 		case VIRTIO_MMIO_QUEUE_READY:
 			mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = *value;
 			break;
 
-/*
-Queue notifier
-Writing a queue index to this register notifies the device that there are new
-buffers to process in the queue.
-*/
+		// Queue notifier
+		// Writing a queue index to this register notifies the device that
+		// there are new buffers to process in that queue.
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
 			if (*value < mmio_dev->vqdev->num_vqs) {
 				notified_queue = &mmio_dev->vqdev->vqs[*value];
 
 				if (notified_queue->eventfd > 0) {
-					eventfd_write(notified_queue->eventfd, 1); // kick the queue's service thread
+					// kick the queue's service thread
+					eventfd_write(notified_queue->eventfd, 1);
 				}
 				// TODO: Should we panic if there's no valid eventfd?
 			}
 			break;
 
-/*
-Interrupt acknowledge
-Writing a value with bits set as defined in InterruptStatus to this register
-notifies the device that events causing the interrupt have been handled.
-*/
+		// Interrupt acknowledge
+		// Writing a value with bits set as defined in InterruptStatus to this
+		// register notifies the device that events causing the interrupt have
+		// been handled.
 		case VIRTIO_MMIO_INTERRUPT_ACK:
-		/*
-			There are only two bits that matter in the interrupt status register
-			0: interrupt because used ring updated in active vq
-			1: interrupt because device config changed
-
-		*/
 			// TODO: Is there anything the device actually has to DO on an interrupt ack
 			//       other than clear the acked interrupt bits in isr?
 			// TODO: If the driver MUST NOT set anything else, should we fail here if they try?
-			*value &= 0b11; // only the lower two bits matter, spec says driver MUST NOT set anything else
+			*value &= 0b11; // only the lower two bits matter, driver MUST NOT set anything else
 			mmio_dev->isr &= ~(*value);
 			break;
 
-/*
-Device status
-Reading from this register returns the current device status flags.
-Writing non-zero values to this register sets the status flags, indicating the
-driver progress. Writing zero (0x0) to this register triggers a device reset.
-See also p. 4.2.3.1 Device Initialization.
-*/
+		// Device status
+		// Writing non-zero values to this register sets the status flags.
+		// Writing zero (0x0) to this register triggers a device reset.
 		case VIRTIO_MMIO_STATUS:
-			// NOTE: The status field is only one byte wide. See section 2.1 of virtio-v1.0-cs04
-			mmio_dev->status = *value & 0xff;
+			// NOTE: The status field is only one byte wide.
+			// See section 2.1 of virtio-v1.0-cs04
 			if (mmio_dev->status == 0) virtio_mmio_reset(mmio_dev);
+			else mmio_dev->status = *value & 0xff;
 			break;
 
-/*
-Virtual queue’s Descriptor Table 64 bit long physical address
-Writing to these two registers (lower 32 bits of the address to QueueDescLow,
-higher 32 bits to QueueDescHigh) notifies the device about location of the
-Descriptor Table of the queue selected by writing to QueueSel register.
-*/
+
+		// Queue's Descriptor Table 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_DESC_LOW:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
 			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr; // assign the new value to the queue desc
+			// assign the new value to the queue desc
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
 			break;
 
-/*
-Virtual queue’s Descriptor Table 64 bit long physical address
-Writing to these two registers (lower 32 bits of the address to QueueDescLow,
-higher 32 bits to QueueDescHigh) notifies the device about location of the
-Descriptor Table of the queue selected by writing to QueueSel register.
-*/
+		// Queue's Descriptor Table 64 bit long physical address, high 32
 		case VIRTIO_MMIO_QUEUE_DESC_HIGH:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
 			                  & ((uint64_t)0xffffffff)); // clear high bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr; // assign the new value to the queue desc
+			temp_ptr = (void *) ((uint64_t)temp_ptr
+			                  | ((uint64_t)(*value) << 32)); // write high bits
+			// assign the new value to the queue desc
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
 			break;
 
-/*
-Virtual queue’s Available Ring 64 bit long physical address
-Writing to these two registers (lower 32 bits of the address to QueueAvailLow,
-higher 32 bits to QueueAvailHigh) notifies the device about location of the
-Available Ring of the queue selected by writing to QueueSel.
-*/
+		// Queue's Available Ring 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_AVAIL_LOW:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
 			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr; // assign the new value to the queue avail
+			// assign the new value to the queue avail
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
 			break;
 
-/*
-Virtual queue’s Available Ring 64 bit long physical address
-Writing to these two registers (lower 32 bits of the address to QueueAvailLow,
-higher 32 bits to QueueAvailHigh) notifies the device about location of the
-Available Ring of the queue selected by writing to QueueSel.
-*/
+		// Queue's Available Ring 64 bit long physical address, high 32
 		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
 			                  & ((uint64_t)0xffffffff)); // clear high bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr; // assign the new value to the queue avail
+			temp_ptr = (void *) ((uint64_t)temp_ptr
+			                  | ((uint64_t)(*value) << 32)); // write high bits
+			// assign the new value to the queue avail
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
 			break;
 
-/*
-Virtual queue’s Used Ring 64 bit long physical address
-Writing to these two registers (lower 32 bits of the address to QueueUsedLow,
-higher 32 bits to QueueUsedHigh) notifies the device about location of the
-Used Ring of the queue selected by writing to QueueSel.
-*/
+		// Queue's Used Ring 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_USED_LOW:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
 			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr; // assign the new value to the queue used
+			// assign the new value to the queue used
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
 			break;
 
-/*
-Virtual queue’s Used Ring 64 bit long physical address
-Writing to these two registers (lower 32 bits of the address to QueueUsedLow,
-higher 32 bits to QueueUsedHigh) notifies the device about location of the
-Used Ring of the queue selected by writing to QueueSel.
-*/
+		// Queue's Used Ring 64 bit long physical address, high 32
 		case VIRTIO_MMIO_QUEUE_USED_HIGH:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
 			                  & ((uint64_t)0xffffffff)); // clear high bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr; // assign the new value to the queue used
+			temp_ptr = (void *) ((uint64_t)temp_ptr
+			                  | ((uint64_t)(*value) << 32)); // write high bits
+			// assign the new value to the queue used
+			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
 			break;
 
 		// Read-only register offsets:
