@@ -9,11 +9,11 @@
 // This file contains the core virtio structs, functions, and macros for Akaros
 
 // Print errors caused by incorrect driver behavior
-#define DRI_ERRX(dev, fmt, ...) \
+#define VIRTIO_DRI_ERRX(dev, fmt, ...) \
 	errx(1, "Virtio Device: %s: Error, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
 
 // Print warnings caused by incorrect driver behavior
-#define DRI_WARNX(dev, fmt, ...) \
+#define VIRTIO_DRI_WARNX(dev, fmt, ...) \
 	warnx("Virtio Device: %s: Warning, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
 
 

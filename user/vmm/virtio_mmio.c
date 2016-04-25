@@ -72,7 +72,7 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		//       the read was atomic.
 		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
 		//       and not by these handlers for the driver to touch the device through.
-		DRI_ERRX(mmio_dev->vqdev, "Attempt to read the device configuration space! Not yet implemented!");
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to read the device configuration space! Not yet implemented!");
 	}
 
 
@@ -113,7 +113,7 @@ DeviceFeaturesSel is set to 1. Also see 2.2 Feature Bits.
 */
 		case VIRTIO_MMIO_DEVICE_FEATURES:
 			if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER))
-				DRI_ERRX(mmio_dev->vqdev,
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 				         "Attempt to read device features before setting the DRIVER status bit. See virtio-v1.0-cs04 sec. 3.1.1.");
 
 			if (mmio_dev->dev_feat_sel) // high 32 bits requested
@@ -212,8 +212,6 @@ operations again. See also 2.3.
 	return 0;
 }
 
-// Writes are always 32 bits at a time! As far as I care and for the time being anyway,
-// this (TODO) might change when we get to the device-specific config space
 void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
@@ -234,7 +232,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		//       the read was atomic.
 		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
 		//       and not by these handlers for the driver to touch the device through.
-		DRI_ERRX(mmio_dev->vqdev, "Attempt to write the device configuration space! Not yet implemented!");
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to write the device configuration space! Not yet implemented!");
 	}
 
 
