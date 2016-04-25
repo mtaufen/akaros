@@ -48,7 +48,7 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 	mmio_dev->status = 0;
 	mmio_dev->isr = 0;
 
-	for (i = 0; i < mmio_dev->vqdev.num_vqs; ++i) {
+	for (i = 0; i < mmio_dev->vqdev->num_vqs; ++i) {
 		// TODO: Should probably kill the handler thread before doing
 		//       anything else. MUST NOT process buffers until reinit!
 		// TODO: If we kill, what does that mean for the eventfds?
@@ -226,11 +226,11 @@ operations again. See also 2.3.
 		case VIRTIO_MMIO_QUEUE_USED_LOW:
 		case VIRTIO_MMIO_QUEUE_USED_HIGH:
 			// Read of write-only register
-			DRI_WARNX(mmio_dev->vqdev, "Attempt to read write-only device register offset 0x%x.", offset);
+			VIRTIO_DRI_WARNX(mmio_dev->vqdev, "Attempt to read write-only device register offset 0x%x.", offset);
 			return 0;
 		default:
 			// Bad register offset
-			DRI_WARNX(mmio_dev->vqdev, "Attempt to read invalid device register offset 0x%x.", offset);
+			VIRTIO_DRI_WARNX(mmio_dev->vqdev, "Attempt to read invalid device register offset 0x%x.", offset);
 			return 0;
 	}
 
