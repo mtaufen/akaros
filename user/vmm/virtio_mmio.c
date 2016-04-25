@@ -302,7 +302,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Writing non-zero values to this register sets the status flags.
 		// Writing zero (0x0) to this register triggers a device reset.
 		case VIRTIO_MMIO_STATUS:
-			fprintf(stderr, "Attempting to set status to 0x%x\n", *value);
+			fprintf(stderr, "Attempting to set status to 0x%x\n", *value); // TODO: remove when done
 
 			if (*value == 0)
 				virtio_mmio_reset(mmio_dev);
@@ -371,6 +371,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				    	& ~mmio_dev->vqdev->dev_feat)) {
 					*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
 				}
+				fprintf(stderr, "Seriously attempting to set status to 0x%x\n", *value); // TODO: remove when done
 				// Device status is only a byte wide.
 				mmio_dev->status = *value & 0xff;
 			}
