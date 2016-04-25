@@ -309,29 +309,48 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			if (mmio_dev->status == 0)
 				virtio_mmio_reset(mmio_dev);
 			// virtio-v1.0-cs04 s2.1.1. driver must NOT clear a status bit
-			else if (mmio_dev->status &~ (*value))
-				VIRTIO_DRI_ERRX(mmio_dev->vqdev, "The driver must not clear a device status bit, except for a reset of the device.");
+			else if (mmio_dev->status & ~(*value)) {
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must not clear any device status bits, except for a reset of the device.");
+			}
 			// virtio-v1.0-cs04 s3.1.1. Set ack bit next after reset
 			else if (mmio_dev->status == 0
-				&& !(*value & VIRTIO_CONFIG_S_ACKNOWLEDGE))
-				VIRTIO_DRI_ERRX(mmio_dev->vqdev, "The driver must set the ACKNOWLEDGE status bit next after reset during init.");
+			&&       !(*value & VIRTIO_CONFIG_S_ACKNOWLEDGE)) {
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must set the ACKNOWLEDGE status bit next after reset during init.");
+			}
 			// virtio-v1.0-cs04 s3.1.1. Set driver bit next after ack bit
 			else if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER)
-				&& !(*value & VIRTIO_CONFIG_S_DRIVER))
-				VIRTIO_DRI_ERRX(mmio_dev->vqdev, "The driver must set the DRIVER status bit next after ACKNOWLEDGE during init.");
+			&&       !(*value & VIRTIO_CONFIG_S_DRIVER)) {
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must set the DRIVER status bit next after ACKNOWLEDGE during init.");
+			}
 			// virtio-v1.0-cs04 s3.1.1. Set feat ok bit next after driver bit
 			else if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
-				&& !(*value & VIRTIO_CONFIG_S_FEATURES_OK))
-				VIRTIO_DRI_ERRX(mmio_dev->vqdev, "The driver must set the FEATURES_OK status bit after DRIVER during init.");
+			&&       !(*value & VIRTIO_CONFIG_S_FEATURES_OK)) {
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must set the FEATURES_OK status bit after DRIVER during init.");
+			}
 			// virtio-v1.0-cs04 s3.1.1. Shouldn't set feat ok and driver ok simultaneously
 			else if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
-				&& !(*value & VIRTIO_CONFIG_S_DRIVER_OK))
-				VIRTIO_DRI_ERRX(mmio_dev->vqdev, "The driver may not set FEATURES_OK and DRIVER_OK status bits simultaneously."
+			&&       (*value & VIRTIO_CONFIG_S_DRIVER_OK)) {
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver may not set FEATURES_OK and DRIVER_OK status bits simultaneously."
 					"It must check FEATURES_OK after set to ensure its activated features are supported by the device,"
 					" before setting DRIVER_OK.");
-			else
-				// TODO: Should we check the features activated when they set FEATURES_OK?
+			}
+			else {
+				// Only set FEATURES_OK bit if the driver activated a
+				// subset of the supported features prior to attempting to
+				// set it. driver & ~device is nonzero if driver activated
+				// a superset of the supported features.
+				if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
+				&& (*value & VIRTIO_CONFIG_S_FEATURES_OK)
+				&& (mmio_dev->vqdev->dri_feat & ~mmio_dev->vqdev->dev_feat))
+					*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
+
 				mmio_dev->status = *value & 0xff;
+			}
 			break;
 
 
