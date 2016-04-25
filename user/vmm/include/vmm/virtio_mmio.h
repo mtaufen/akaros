@@ -135,15 +135,15 @@
 #define VIRTIO_MMIO_INT_VRING		(1 << 0)
 #define VIRTIO_MMIO_INT_CONFIG		(1 << 1)
 
-// NOTE: Stuff below this line was added for Akaros
+// NOTE: Stuff above this line taken from linux/virtio_mmio.h,
+//       stuff below this line was added for Akaros.
+// The Akaros stuff is somewhat inspired by how QEMU did virtio,
+// QEMU is licensed under the GPL.
 
 #include <stdint.h>
 #include <vmm/virtio.h>
 
-// The mmio device that wraps the vqdev. Holds things like the base
-// address of the device, the device status register, queue selectors, etc.
-// TODO: Remove fields that I just shim out or don't need, or that are already on the vqdev
-// this is a NON LEGACY DEVICE!
+// The virtio mmio transport device. Wraps a virtio_vq_dev.
 struct virtio_mmio_dev {
 	// The base address of the virtio mmio device
 	// we save the same value here as we report to guest via kernel cmd line
@@ -162,7 +162,7 @@ struct virtio_mmio_dev {
 	uint32_t isr;
 
 	// Status flags for the device
-	uint32_t status;
+	uint8_t status;
 
 	// ConfigGeneration, used to check that access to device-specific config space was atomic
 	uint32_t cfg_gen;

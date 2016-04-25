@@ -478,68 +478,56 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		/*
 			There are only two bits that matter in the interrupt status register
 			0: interrupt because used ring updated in active vq
-			1: interrupt because dev config changed
-
-			the device sets the interrupt status reg
-			the driver acks handling by writing the same flags for the events it handled to the ack reg
-			The spec says that the driver MUST NOT set any of the undefined bits in this value
-			so we need to protect against that.
+			1: interrupt because device config changed
 
 		*/
+			// TODO: If the driver MUST NOT set anything else, should we fail here?
 			*value &= 0b11; // only the lower two bits matter, spec says driver MUST NOT set anything else
 			mmio_dev->isr &= ~(*value);
 			break;
 
 		case VIRTIO_MMIO_STATUS:
-		// TODO: Ron was doing mmio.status |= value & 0xff;
-		//       why only letting the last byte through?
-		//       I guess this register is only a byte?
-		// TODO: Should we also check the DRIVER_OK bit of the status reg here?
-		//       qemu starts/stops their virtio mmio ioeventfd stuff if the
-		//       VIRTIO_CONFIG_S_DRIVER_OK bit is set/not set
-		// TODO: I guess status is only a byte? Kind of seems that way in the spec...
+			// NOTE: The status field is only one byte wide. See section 2.1 of virtio-v1.0-cs04
 			mmio_dev->status = *value & 0xff;
 			if (mmio_dev->status == 0) virtio_mmio_reset(mmio_dev);
 			break;
 
-// TODO: guest phys should equal host virt... we'll see if this address math works....
-// TODO: test without the casts and see if things blow up...
-		case VIRTIO_MMIO_QUEUE_DESC_LOW: // TODO: Test this
+		case VIRTIO_MMIO_QUEUE_DESC_LOW:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
 			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
 			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr; // assign the new value to the queue desc
 			break;
 
-		case VIRTIO_MMIO_QUEUE_DESC_HIGH: // TODO: Test this
+		case VIRTIO_MMIO_QUEUE_DESC_HIGH:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
 			                  & ((uint64_t)0xffffffff)); // clear high bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
 			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr; // assign the new value to the queue desc
 			break;
 
-		case VIRTIO_MMIO_QUEUE_AVAIL_LOW: // TODO: Test this
+		case VIRTIO_MMIO_QUEUE_AVAIL_LOW:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
 			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
 			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr; // assign the new value to the queue avail
 			break;
 
-		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH: // TODO: Test this
+		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
 			                  & ((uint64_t)0xffffffff)); // clear high bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
 			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr; // assign the new value to the queue avail
 			break;
 
-		case VIRTIO_MMIO_QUEUE_USED_LOW: // TODO: Test this
+		case VIRTIO_MMIO_QUEUE_USED_LOW:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
 			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
 			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr; // assign the new value to the queue used
 			break;
 
-		case VIRTIO_MMIO_QUEUE_USED_HIGH: // TODO: Test this
+		case VIRTIO_MMIO_QUEUE_USED_HIGH:
 			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
 			                  & ((uint64_t)0xffffffff)); // clear high bits
 			temp_ptr = (void *) ((uint64_t)temp_ptr | ((uint64_t)(*value) << 32)); // write high bits
