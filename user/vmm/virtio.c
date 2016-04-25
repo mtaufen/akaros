@@ -74,7 +74,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		//             by default, because it is only supposed to be set by the host and
 		//             I never set it. But this is worth double-checking.
 
-
+// TODO: make this a real error
 		if (eventfd_read(vq->eventfd, &event))
 			printf("next_avail_vq_desc event read failed?\n");
 

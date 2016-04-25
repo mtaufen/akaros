@@ -327,66 +327,6 @@ buffers to process in the queue.
 					eventfd_write(notified_queue->eventfd, 1); // kick the queue's service thread
 				}
 				// TODO: Should we panic if there's no valid eventfd?
-
-				/*
-
-				We error if vq->vring.avail->idx - last_avail > vq->vring.num
-				// TODO: Figure out what that error means.
-
-				rmb(); // read memory barrier
-				the purpose of that barrier is to "make sure we read the descriptor number *after*
-				we read the ring update; don't let the cpu or compiler change the order"
-				// TODO: Figure out and document why this is important
-
-				Now comes the real meat of the function.
-
-				first we set head = vq->vring.avail->ring[last_avail % vq->vring.num]
-				then we increment vq->last_avail_idx
-
-				then set the in len and out len to 0 again. I think this is the one that actually matters
-
-				then:
-				max = vq->vring.num;
-				desc = vq->vring.desc;
-				i = head;
-
-				Ah, so it looks like num is maybe like our qnum_max?
-
-				then they check desc[i].flags for VRING_DESC_F_INDIRECT to see if index i
-				is an indirect entry. If it is an indirect entry, then the buffer contains
-				a descriptor table and, after validating that the len of the buffer (i.e. the
-				size of the table) is evenly divisible by the size of a vring_desc, they set
-				`max` to the number of vring_descs that can fit in the buffer. Finally, they
-				check that the desc[i].addr + desc[i].len neither exceeds the limit on guest
-				memory nor wraps around. That memory limit is hardcoded as
-				#define guest_limit ((1ULL<<48)-1)
-
-				Then they have a loop that builds the iov (array of scatterlists), while
-				checking that the addr and len of each desc that it's putting in the scatterlist
-				neither exceeds the limit on guest memory nor wraps around.
-				They also check that no output descriptors come after the input descriptors.
-				// TODO: We'll probably have to do that.
-				It knows to stop building the iov when (i = next_desc(desc, i, max)) != max
-
-				Note: The static unsigned next_desc(struct vring_desc *desc, unsigned int i, unsigned int max)
-				function does the following:
-					return max if the descriptor says it doesn't chain (VRING_DESC_F_NEXT bit set on the desc[i].flags)
-					otherwise set next to desc[i].next
-					wmb() // write memory barrier // TODO: I'm not really sure that this is necessary?
-					check that next is not greater or equal to max (cause error if so)
-					return next
-
-
-				So basically, the goal of our wait_for_vq_desc is to spin until the available index is
-				incremented, and then
-
-				The old one
-
-
-
-
-
-				*/
 			}
 			break;
 
