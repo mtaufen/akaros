@@ -26,6 +26,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdio.h>
 #include <sys/eventfd.h>
 #include <vmm/virtio_config.h>
 #include <vmm/virtio_mmio.h>
@@ -43,6 +44,8 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 
 	if (!mmio_dev->vqdev)
 		return;
+
+	fprintf(stderr, "virtio mmio device reset: %s\n", mmio_dev->vqdev->name);
 
 	mmio_dev->vqdev->dri_feat = 0;
 	mmio_dev->status = 0;
