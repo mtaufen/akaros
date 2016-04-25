@@ -37,6 +37,12 @@
 
 #define VIRT_MMIO_VENDOR 0x52414B41 /* 'AKAR' */
 
+static void virtio_mmio_reset_cfg(struct virtio_mmio_dev *mmio_dev)
+{
+	// TODO: Reset the device-specific configuration space.
+	VIRTIO_DRI_WARNX(mmio_dev->vqdev, "Attempt to reset device configuration space, not yet implemented!");
+}
+
 static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 {
 	// TODO: Audit the reset function!
@@ -64,12 +70,6 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 
 	virtio_mmio_reset_cfg(mmio_dev);
 
-}
-
-static void virtio_mmio_reset_cfg(struct virtio_mmio_dev *mmio_dev)
-{
-	// TODO: Reset the device-specific configuration space.
-	VIRTIO_DRI_WARNX(mmio_dev->vqdev, "Attempt to reset device configuration space, not yet implemented!");
 }
 
 // TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
