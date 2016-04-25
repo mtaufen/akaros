@@ -141,8 +141,10 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		// Applies to the queue selected by writing to QueueSel.
 		case VIRTIO_MMIO_QUEUE_NUM_MAX:
 		// TODO: Is !qready the same as not available?
-			if (mmio_dev->qsel >= mmio_dev->vqdev->num_vqs
-				|| !mmio_dev->vqdev->vqs[mmio_dev->qsel].qready)
+		// NOTE: Returning 0 here if !qready causes linux's driver
+		//       to fail to initialize the vqs.
+			if (mmio_dev->qsel >= mmio_dev->vqdev->num_vqs)
+				//|| !mmio_dev->vqdev->vqs[mmio_dev->qsel].qready)
 				return 0;
 			return mmio_dev->vqdev->vqs[mmio_dev->qsel].qnum_max;
 
