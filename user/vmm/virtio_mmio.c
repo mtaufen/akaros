@@ -211,11 +211,11 @@ operations again. See also 2.3.
 		case VIRTIO_MMIO_QUEUE_USED_LOW:
 		case VIRTIO_MMIO_QUEUE_USED_HIGH:
 			// Read of write-only register
-			DRI_WARNX(mmio_dev->vqdev, "Attempt to read write-only device register offset.");
+			DRI_WARNX(mmio_dev->vqdev, "Attempt to read write-only device register offset 0x%x.", offset);
 			return 0;
 		default:
 			// Bad register offset
-			DRI_WARNX(mmio_dev->vqdev, "Attempt to read invalid device register offset.");
+			DRI_WARNX(mmio_dev->vqdev, "Attempt to read invalid device register offset 0x%x.", offset);
 			return 0;
 	}
 
