@@ -62,11 +62,14 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 
 // TODO: Put parts of the virito spec relating to reset in here
 
+	virtio_mmio_reset_cfg(mmio_dev);
+
 }
 
 static void virtio_mmio_reset_cfg(struct virtio_mmio_dev *mmio_dev)
 {
 	// TODO: Reset the device-specific configuration space.
+	VIRTIO_DRI_WARNX(mmio_dev->vqdev, "Attempt to reset device configuration space, not yet implemented!");
 }
 
 // TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
@@ -93,13 +96,7 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 	}
 
 	if (offset >= VIRTIO_MMIO_CONFIG) {
-		// TODO: Figure out what to do for reading the device config space
-		// TODO: Will also probably have to set the ConfigGeneration stuff
-		//       when I finally get to writing the device configuration space.
-		//       And will definitely have to read that value twice to make sure
-		//       the read was atomic.
-		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
-		//       and not by these handlers for the driver to touch the device through.
+		// TODO: Implement reading the device config space
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to read the device configuration space! Not yet implemented!");
 	}
 
@@ -253,13 +250,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 	}
 
 	if (offset >= VIRTIO_MMIO_CONFIG) {
-		// TODO: Figure out what to do for writing the device config space
-		// TODO: Will also probably have to set the ConfigGeneration stuff
-		//       when I finally get to writing the device configuration space.
-		//       And will definitely have to read that value twice to make sure
-		//       the read was atomic.
-		// TODO: ConfigGenreation is a read only register, so it is probably set by the device,
-		//       and not by these handlers for the driver to touch the device through.
+		// TODO: Implement writing the device config space
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to write the device configuration space! Not yet implemented!");
 	}
 
