@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <err.h>
 #include <pthread.h>
+#include <sys/uio.h>
 #include <vmm/virtio_ring.h>
 
 // This file contains the core virtio structs, functions, and macros for Akaros
@@ -72,3 +73,13 @@ struct virtio_vq_dev {
 	// Flexible array of vqs on this device
 	struct virtio_vq vqs[]; // TODO: QEMU macros a fixed-length in here, that they just make the max number of queues
 };
+
+// TODO: Rename this fn
+// Based on wait_for_vq_desc in Linux lguest.c
+uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
+                            uint32_t *olen, uint32_t *ilen);
+
+// TODO: Rename this to something more succinct and understandable!
+// Based on the add_used function in lguest.c
+// Adds descriptor chain to the used ring of the vq
+void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len);
