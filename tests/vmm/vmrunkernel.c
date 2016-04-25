@@ -512,11 +512,11 @@ uint32_t next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[], // TODO: s
 			//           the thing written to the QueueNum register (how big the queues the driver will
 			//           use are).
 			// TODO: do we allow the driver to write something greater than QueueNumMax to QueueNum?
-			//       checking both vring.num and maxqnum for now, need to double check whether we
+			//       checking both vring.num and qnum_max for now, need to double check whether we
 			//       actually just need vring.num to be checked.
-			if (max > vq->vring.num || max > vq->maxqnum) {
+			if (max > vq->vring.num || max > vq->qnum_max) {
 				//TODO make this an actual error
-				printf("indirect desc has too many entries. number greater than vq->maxqnum\n");
+				printf("indirect desc has too many entries. number greater than vq->qnum_max\n");
 			}
 		}
 
@@ -700,25 +700,25 @@ static struct virtio_vq_dev cons_vqdev = {
 	name: "console",
 	dev_id: VIRTIO_ID_CONSOLE,
 	dev_feat: (uint64_t)1 << VIRTIO_F_VERSION_1,
-	numvqs: 2,
+	num_vqs: 2,
 	transport_dev: &cons_mmio_dev,
 	vqs: {
 			{
 				name: "cons_receiveq (host dev to guest driver)",
-				maxqnum: 64,
+				qnum_max: 64,
 				srv_fn: cons_receiveq_fn,
 				vqdev: &cons_vqdev
 			},
 			{
 				name: "cons_transmitq (guest driver to host dev)",
-				maxqnum: 64,
+				qnum_max: 64,
 				srv_fn: cons_transmitq_fn,
 				vqdev: &cons_vqdev
 			},
 		}
 };
 
-// TODO: still have to figure out what maxqnum is...
+// TODO: still have to figure out what qnum_max is...
 
 // Recieve thread (not sure whether it's "vm is recving" or "vmm is recving" yet)
 static void * netrecv(void *arg)
@@ -740,10 +740,10 @@ static struct virtio_vq_dev vq_net_dev = {
 	name: "net",
 	dev_id: VIRTIO_ID_NET,
 	dev_feat: VIRTIO_F_VERSION_1,
-	numvqs: 2,
+	num_vqs: 2,
 	vqs: {
-			{name: "netrecv", maxqnum: 64, srv_fn: netrecv}, // queue 0 is the console dev receiveq
-			{name: "netsend", maxqnum: 64, srv_fn: netsend}, // queue 1 is the console dev transmitq
+			{name: "netrecv", qnum_max: 64, srv_fn: netrecv}, // queue 0 is the console dev receiveq
+			{name: "netsend", qnum_max: 64, srv_fn: netsend}, // queue 1 is the console dev transmitq
 		}
 };
 

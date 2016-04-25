@@ -18,17 +18,17 @@ struct virtio_vq {
 	struct virtio_vq_dev *vqdev;
 
 	// The vring contains pointers to the descriptor table and available and used rings
+	// as well as the number of elements in the queue.
 	struct vring vring;
 
-	// TODO: Figure out exactly what maxqnum is for
-	int maxqnum; // how many things the q gets? or something.
-
-	// TODO: comment this
-	uint32_t status;
+	// The maximum number of elements in the queue that the device is ready to process
+	// Reads from the register corresponding to this value return 0x0 if the queue is
+	// not available.
+	int qnum_max;
 
 	// The driver writes 0x1 to qready to tell the device
 	// that it can execute requests from this vq
-	uint32_t qready; // TODO do we prevent access to the queue before this is written?
+	uint32_t qready;
 
 	// The last vq.vring.avail->idx that the service function saw while processing the queue
 	uint16_t last_avail;
@@ -59,10 +59,10 @@ struct virtio_vq_dev {
 	// The virtio transport dev that contains this vqdev. i.e. struct virtio_mmio_dev
 	void *transport_dev;
 
-	// The number of vqs on this device
-	int numvqs;
+	// The number of vqs on this device. You MUST set this to the same number of
+	// virtio_vqs that you put in the vqs array on the virtio_vq_dev.
+	int num_vqs;
 
 	// Flexible array of vqs on this device TODO document that you usually just init this with a struct literal
 	struct virtio_vq vqs[]; // TODO: QEMU macros a fixed-length in here, that they just make the max number of queues
-	// TODO: Is there a way to do a compile time check that someone actually put as many vqs in here as they said they would?
 };

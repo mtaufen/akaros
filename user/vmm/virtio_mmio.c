@@ -43,6 +43,7 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 }
 
 // TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
+// TODO: MAKE SURE WE DO THIS FOR qready!!!!!
 
 // Reads are ALWAYS 32 bit at a time
 uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
@@ -51,13 +52,13 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 
 	// TODO: Are there any more static fields to return here in a non-legacy device?
 	// TODO: Is there a use case where you would want to read registers from the
-	//       mmio_dev that would make sense even if vqdev->numvqs == 0?
+	//       mmio_dev that would make sense even if vqdev->num_vqs == 0?
 /*	If there is no vqdev registered with this mmio device,
 	or if there are no vqs on the device, we
 	return all registers as 0 except for the virtio magic
 	number, the mmio version, and the device vendor.
 	*/
-	if (!mmio_dev->vqdev || mmio_dev->vqdev->numvqs == 0) {
+	if (!mmio_dev->vqdev || mmio_dev->vqdev->num_vqs == 0) {
 		switch(offset) {
 		case VIRTIO_MMIO_MAGIC_VALUE:
 			return VIRT_MAGIC;
@@ -134,15 +135,15 @@ to the queue selected by writing to QueueSel.
 			// TODO: For now, we are assuming that if you gave a vqdev
 			//       to the mmio_dev, the queues on it are "available."
 			//       I am going to guard against the qsel being
-			//       greater than the numvqs on the vq_def, however.
+			//       greater than the num_vqs on the vq_def, however.
 			//       Since queues above this number don't exist, they
 			//       definitely are not available.
 			// Queue indices start at 0
 		// TODO: Is not checking mmio_dev->vqdev->vqs[mmio_dev->qsel].qready
 		//       the right thing to do here?
-			if (mmio_dev->qsel >= mmio_dev->vqdev->numvqs)
+			if (mmio_dev->qsel >= mmio_dev->vqdev->num_vqs)
 				return 0;
-			return mmio_dev->vqdev->vqs[mmio_dev->qsel].maxqnum;
+			return mmio_dev->vqdev->vqs[mmio_dev->qsel].qnum_max;
 /*
 Virtual queue ready bit
 Writing one (0x1) to this register notifies the device that it can execute requests from
@@ -150,7 +151,7 @@ this virtual queue. Reading from this register returns the last value written to
 read and write accesses apply to the queue selected by writing to QueueSel.
 */
 		case VIRTIO_MMIO_QUEUE_READY:
-			if (mmio_dev->qsel >= mmio_dev->vqdev->numvqs)
+			if (mmio_dev->qsel >= mmio_dev->vqdev->num_vqs)
 				return 0;
 			return mmio_dev->vqdev->vqs[mmio_dev->qsel].qready;
 /*
@@ -265,9 +266,9 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// TODO: For now, if the value is above the number of vqs, we just won't set it.
 		//       This may or may not be the right thing to do. QEMU just decides not to set
 		//       it if it is greater than or equal to 1024 (their VIRTIO_QUEUE_MAX macro)
-		// TODO: If we make sure it's less than numvqs, we probably don't need to bounds-check
+		// TODO: If we make sure it's less than num_vqs, we probably don't need to bounds-check
 		//       in the read reg function.
-			if (*value < mmio_dev->vqdev->numvqs) {
+			if (*value < mmio_dev->vqdev->num_vqs) {
 				mmio_dev->qsel = *value;
 			}
 			break;
@@ -284,7 +285,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// printf("in queue notify\n");
 		// TODO: Ron was just setting the qsel here... is that the right thing?
 		//       The spec is pretty clear that qsel is a different register than this.
-		// TODO: Bounds check the value against numvqs, first, obviously
+		// TODO: Bounds check the value against num_vqs, first, obviously
 		// TODO: It looks like QEMU would actually do some sort of notification handling
 		//       when you would write to this register.
 		// bounds check -> virtio_queue_notify -> virtio_queue_notify_vq ->
@@ -306,7 +307,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		//       things faster.
 		//       But for now, we're going to stay single threaded, and just call the handler function
 		//       for the queue directly here, so we can tell if things work or not.
-			if (*value < mmio_dev->vqdev->numvqs) {
+			if (*value < mmio_dev->vqdev->num_vqs) {
 				// TODO: The arg is just for arbitrary use?
 				// TODO: I'm passing 0 for now and just using my own custom handlers
 				// TODO: Since we're just using the console right now I think this only ever calls consout
@@ -412,7 +413,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				desc = vq->vring.desc;
 				i = head;
 
-				Ah, so it looks like num is maybe like our maxqnum?
+				Ah, so it looks like num is maybe like our qnum_max?
 
 				then they check desc[i].flags for VRING_DESC_F_INDIRECT to see if index i
 				is an indirect entry. If it is an indirect entry, then the buffer contains

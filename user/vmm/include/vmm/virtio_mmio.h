@@ -161,7 +161,7 @@ struct virtio_mmio_dev {
 	// Interrupt status register
 	uint32_t isr;
 
-	// Status register for the device
+	// Status flags for the device
 	uint32_t status;
 
 	// ConfigGeneration, used to check that access to device-specific config space was atomic
