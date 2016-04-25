@@ -97,7 +97,8 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 
 	if (offset >= VIRTIO_MMIO_CONFIG) {
 		// TODO: Implement reading the device config space
-		VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to read the device configuration space! Not yet implemented!");
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+			"Attempt to read the device configuration space! Not yet implemented!");
 	}
 
 
@@ -127,7 +128,9 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		case VIRTIO_MMIO_DEVICE_FEATURES:
 			if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER))
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-				         "Attempt to read device features before setting the DRIVER status bit. See virtio-v1.0-cs04 sec. 3.1.1.");
+				         "Attempt to read device features before setting the DRIVER status bit."
+				         " See virtio-v1.0-cs04 sec. 3.1.1."
+				         " 0x%x", mmio_dev->status);
 			if (mmio_dev->dev_feat_sel) // high 32 bits requested
 				return mmio_dev->vqdev->dev_feat >> 32;
 			return mmio_dev->vqdev->dev_feat; // low 32 bits requested
@@ -299,60 +302,79 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Writing non-zero values to this register sets the status flags.
 		// Writing zero (0x0) to this register triggers a device reset.
 		case VIRTIO_MMIO_STATUS:
-			// NOTE: For now, we allow the driver to set all status bits up
-			// through FEATURES_OK in one fell swoop. The driver is, however,
-			// required to re-read FEATURES_OK after setting it to be sure
-			// that the driver-activated features are a subset of those
-			// supported by the device, so it must make an additional write
-			// to set DRIVER_OK. We allow the driver to set the same bit over
-			// and over without continuing, if it wants to.
-			if (mmio_dev->status == 0)
+			fprintf(stderr, "Attempting to set status to 0x%x\n", *value);
+
+			if (*value == 0)
 				virtio_mmio_reset(mmio_dev);
 			// virtio-v1.0-cs04 s2.1.1. driver must NOT clear a status bit
 			else if (mmio_dev->status & ~(*value)) {
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-					"The driver must not clear any device status bits, except for a reset of the device.");
+					"The driver must not clear any device status bits,"
+					" except for a reset of the device.");
 			}
-			// virtio-v1.0-cs04 s3.1.1. Set ack bit next after reset
-			else if (mmio_dev->status == 0
-			&&       !(*value & VIRTIO_CONFIG_S_ACKNOWLEDGE)) {
+
+			// NOTE: If a bit is not set in value, then at this point it
+			//       CANNOT be set in status either, because if it were
+			//       set in status, we would have just crashed with an
+			//       error due to the attempt to clear a status bit.
+
+			// Now we check that status bits are set in the correct
+			// sequence during device initialization as described
+			// in virtio-v1.0-cs04 s3.1.1.
+
+			else if ((*value & VIRTIO_CONFIG_S_DRIVER)
+			          && !(*value & VIRTIO_CONFIG_S_ACKNOWLEDGE)) {
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-					"The driver must set the ACKNOWLEDGE status bit next after reset during init.");
+					"Tried to set DRIVER status bit before setting"
+					" ACKNOWLEDGE feature bit.");
 			}
-			// virtio-v1.0-cs04 s3.1.1. Set driver bit next after ack bit
-			else if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER)
-			&&       !(*value & VIRTIO_CONFIG_S_DRIVER)) {
+			else if ((*value & VIRTIO_CONFIG_S_FEATURES_OK)
+			         && !((*value & VIRTIO_CONFIG_S_ACKNOWLEDGE)
+				           && (*value & VIRTIO_CONFIG_S_DRIVER))) {
+				// All those parentheses... Lisp must be making a comeback.
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-					"The driver must set the DRIVER status bit next after ACKNOWLEDGE during init.");
+					"Tried to set FEATURES_OK status bit before setting both"
+					" ACKNOWLEDGE and DRIVER status bits.");
 			}
-			// virtio-v1.0-cs04 s3.1.1. Set feat ok bit next after driver bit
-			else if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
-			&&       !(*value & VIRTIO_CONFIG_S_FEATURES_OK)) {
+			else if ((*value & VIRTIO_CONFIG_S_DRIVER_OK)
+			         && !((*value & VIRTIO_CONFIG_S_ACKNOWLEDGE)
+				           && (*value & VIRTIO_CONFIG_S_DRIVER)
+				           && (*value & VIRTIO_CONFIG_S_FEATURES_OK))) {
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-					"The driver must set the FEATURES_OK status bit after DRIVER during init.");
+					"Tried to set DRIVER_OK status bit before setting all of"
+					" ACKNOWLEDGE, DRIVER, and FEATURES_OK status bits.");
 			}
-			// virtio-v1.0-cs04 s3.1.1. Shouldn't set feat ok and driver ok simultaneously
-			else if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
-			&&       (*value & VIRTIO_CONFIG_S_DRIVER_OK)) {
+
+			// NOTE: For now, we allow the driver to set all status bits up
+			//       through FEATURES_OK in one fell swoop. The driver is, however,
+			//       required to re-read FEATURES_OK after setting it to be sure
+			//       that the driver-activated features are a subset of those
+			//       supported by the device, so it must make an additional write
+			//       to set DRIVER_OK.
+
+			else if ((*value & VIRTIO_CONFIG_S_DRIVER_OK)
+			         && !(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)) {
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-					"The driver may not set FEATURES_OK and DRIVER_OK status bits simultaneously."
-					"It must check FEATURES_OK after set to ensure its activated features are supported by the device,"
+					"The driver may not set FEATURES_OK and DRIVER_OK status"
+					" bits simultaneously."
+					" It must read back FEATURES_OK after setting it to ensure"
+					" that its activated features are supported by the device"
 					" before setting DRIVER_OK.");
 			}
 			else {
-				// Only set FEATURES_OK bit if the driver activated a
-				// subset of the supported features prior to attempting to
-				// set it. driver & ~device is nonzero if driver activated
-				// a superset of the supported features.
+				// NOTE: Don't set the FEATURES_OK bit unless the driver
+				//       activated a subset of the supported features prior to
+				//       attempting to set FEATURES_OK.
 				if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
-				&& (*value & VIRTIO_CONFIG_S_FEATURES_OK)
-				&& (mmio_dev->vqdev->dri_feat & ~mmio_dev->vqdev->dev_feat))
+				    && (*value & VIRTIO_CONFIG_S_FEATURES_OK)
+				    && (mmio_dev->vqdev->dri_feat
+				    	& ~mmio_dev->vqdev->dev_feat)) {
 					*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
-
+				}
+				// Device status is only a byte wide.
 				mmio_dev->status = *value & 0xff;
 			}
 			break;
-
 
 		// Queue's Descriptor Table 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_DESC_LOW:
