@@ -320,117 +320,17 @@ Writing a queue index to this register notifies the device that there are new
 buffers to process in the queue.
 */
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
-		// TODO: Ron was just setting the qsel here... is that the right thing?
-		//       The spec is pretty clear that qsel is a different register than this.
-		// TODO: Bounds check the value against num_vqs, first, obviously
-		// TODO: It looks like QEMU would actually do some sort of notification handling
-		//       when you would write to this register.
-		// bounds check -> virtio_queue_notify -> virtio_queue_notify_vq ->
-		//  if (vq->vring.desc && vq->handle_output) { vq->handle_output(vq->vdev, vq); }
-		//  and handle_output is a method on QEMU's VirtQueue.
-		// seems like when you add a queue to a vdev in qemu, you pass a handle_output function
-		// pointer with it.
-		// our version of vq->vring.desc is probably vq->qdesc but I have to make sure...
-		// rather, qdesc might be the driver saying "hey, here's the address of the qdesc"
-		// TODO: The driver tells the device that there are new buffers available in a queue
-		//       by writing the index of the updated queue to this register. We'll have to figure
-		//       out what to do with this information later.
-		// TODO: Our model is to have spinning IO threads, because we just want to see stuff show up
-		//       in the queues in memory. VIRTIO spec says to catch the write to this register, and use
-		//       that as the trigger to process a queue.
-		//       But that will cause a VM exit due to EPT violation, which makes things slow.
-		//       So we will have to prevent the Linux virtio mmio driver from trying to write to
-		//       queue notify. So we're deviating a little bit from the spec for this in order to make
-		//       things faster.
-		//       But for now, we're going to stay single threaded, and just call the handler function
-		//       for the queue directly here, so we can tell if things work or not.
 			if (*value < mmio_dev->vqdev->num_vqs) {
-				// TODO: The arg is just for arbitrary use?
-				// TODO: I'm passing 0 for now and just using my own custom handlers
-				// TODO: Since we're just using the console right now I think this only ever calls consout
-				// TODO: consin might stop working when we switch the rd/wr reg functions in vmrunkernel...
-				// TODO: And this stuff did originally work...... so what did we screw with in the Linux driver?
-				//qnotify_arg = &mmio_dev->vqdev->vqs[mmio_dev->qsel];
-
-				// TODO: Can't use the original handlers in here, since they have (intended) infinite loops
-				// TODO: Akaros vmrunkernel model would have done a pthread create, but this one will just call
-				//       the handlers for now. We'll figure out how to do the spinning threads, and where the best
-				//       place to spawn them, later on.
-
 				notified_queue = &mmio_dev->vqdev->vqs[*value];
 
-
-				//qnotify_arg->arg = qnotify_arg; // TODO: This makes the most sense to me right now, probably unnecessary though
-				// TODO: Gotta figure out what that virtio pointer on the vq struct is for though...
-				//       Ron treats it like a struct virtqueue (def in include/vmm/virtio.h) in his
-				//       handler fns, and calls wait_for_vq_desc on it.
-
-				//mmio_dev->vqdev->vqs[*value].f(notified_queue);
 				if (notified_queue->eventfd > 0) {
 					eventfd_write(notified_queue->eventfd, 1); // kick the queue's service thread
 				}
 				// TODO: Should we panic if there's no valid eventfd?
 
 				/*
-					What do we do about arg...
-					before, Ron was passing a pointer to the queue selected in the QUEUE_PFN
-					mmio handler. He sets the virtio pointer on the vq to a new struct virtqueue
-					created as follows:
-			va->arg->virtio = vring_new_virtqueue(mmio.qsel,
-							  mmio.vqdev->vqs[mmio.qsel].qnum,
-							  mmio.vqdev->vqs[mmio.qsel].qalign,
-							  false, // weak_barriers
-							  (void *)(mmio.vqdev->vqs[mmio.qsel].pfn * mmio.vqdev->vqs[mmio.qsel].qalign),
-							  NULL, NULL, // callbacks
- 							  mmio.vqdev->vqs[mmio.qsel].name);
 
- 					I think the only reason to do this is so that you have the right type to use the
- 					wait_for_vq_desc function on the queue. But there is a lot of magic going on here...
-
- 					well, that, and when we eventually do want to do no-exit io, we'll need to make sure
- 					that our queue uses exactly the same layout in memory as Linux's, because that's the
- 					layout Linux's driver will use when it puts stuff in the queues.
-
-
-
-				What our hacked up version of wait_for_vq_desc does:
-				takes a pointer to a virtqueue,
-				a pointer to a scatterlist,
-				a pointer to an out len,
-				and a pointer to an in len
-
-				Note: sometimes I refer to the vring_virtqueue as the vq
-
-				converts the virtqueue to a vring_virtqueue by calling to_vvq with the virtqueue
-				a vring_virtqueue is a wrapper around the virtqueue that has the vring memory layout
-				for the queue, some configuration bools, the head of the free buffer list, the number
-				of (buffers?) added "since the last sync", the last used index "seen", some stuff to
-				"figure out if their kicks are too delayed" and a data pointer (what data idk,
-				it says "Tokens for callbacks.").
-
-				sets uint16 last_avail to the ret of lg_last_avail( the vring_virtqueue ), which
-				is actually just a macro that returns the vring_virtqueue's last_avail_idx.
-
-				sets the in len and out len to 0
-
-				then, while last_avail equals the vring_virtqueue's vring.avail->idx, it spins, continually doing:
-					return 0 if the _vq is broken (_vq is the virtqueue inside the vring_virtqueue)
-					// TODO: What are the conditions where a virtqueue can be broken?
-					*1*
-					clear the VRING_USED_F_NO_NOTIFY bit on the vq->vring.used->flags
-					mb() // memory barrier
-					if (last_avail != vq->vring.avail->idx)
-						set the vq->vring.used->flags VRING_USED_F_NO_NOTIFY bit
-					*2*
-					set the vq->vring.used->flags VRING_USED_F_NO_NOTIFY_BIT
-
-				Note: The original one would trigger_irq(vq) at *1*
-					  and do an eventfd read (thus waiting) at *2*
-
-				So the end result of that while loop is that the VRING_USED_F_NO_NOTIFY bit is
-				set when we finaly exit the loop (unless the virtqueue was broken)
-
-				Then we error if vq->vring.avail->idx - last_avail > vq->vring.num
+				We error if vq->vring.avail->idx - last_avail > vq->vring.num
 				// TODO: Figure out what that error means.
 
 				rmb(); // read memory barrier

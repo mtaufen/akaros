@@ -82,6 +82,16 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		mb();
 	}
 
+	// Read the desc num (head) after we detect the ring update (vq->last_avail != vq->vring.avail->idx)
+	rmb();
+
+	/* TODO: lguest also checks for this:
+	// Check it isn't doing very strange things with descriptor numbers.
+	if ((u16)(vq->vring.avail->idx - last_avail) > vq->vring.num)
+		bad_driver_vq(vq, "Guest moved used index from %u to %u",
+			      last_avail, vq->vring.avail->idx);
+	*/
+
 	// Mod because it's a *ring*
 	// TODO: maybe switch to using vq->vring.num for ours too
 	head = vq->vring.avail->ring[vq->last_avail % vq->vring.num];
