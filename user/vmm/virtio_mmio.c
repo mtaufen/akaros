@@ -27,18 +27,10 @@
  */
 
 #include <stdio.h> // TODO: remove this when all printfs have been replaced with actual errors
-#include <err.h>
+
 #include <sys/eventfd.h>
 #include <vmm/virtio_config.h>
 #include <vmm/virtio_mmio.h>
-
-// Print errors caused by incorrect driver behavior
-#define DRI_ERRX(dev, fmt, ...) \
-	errx(1, "Virtio Device: %s: Error, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
-
-// Print warnings caused by incorrect driver behavior
-#define DRI_WARNX(dev, fmt, ...) \
-	warnx("Virtio Device: %s: Warning, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
 
 #define VIRT_MAGIC 0x74726976 /* 'virt' */
 

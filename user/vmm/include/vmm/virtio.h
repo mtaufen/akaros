@@ -1,13 +1,19 @@
 #pragma once
 
-/* Core virtio definitions for Akaros
-	For example: The definitions of our virtqueue and
-	             generic virtio device structures.
-*/
-
 #include <stdint.h>
+#include <err.h>
 #include <pthread.h>
 #include <vmm/virtio_ring.h>
+
+// This file contains the core virtio structs, functions, and macros for Akaros
+
+// Print errors caused by incorrect driver behavior
+#define DRI_ERRX(dev, fmt, ...) \
+	errx(1, "Virtio Device: %s: Error, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
+
+// Print warnings caused by incorrect driver behavior
+#define DRI_WARNX(dev, fmt, ...) \
+	warnx("Virtio Device: %s: Warning, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
 
 
 struct virtio_vq {
