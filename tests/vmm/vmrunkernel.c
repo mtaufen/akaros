@@ -389,28 +389,17 @@ static void *cons_receiveq_fn(void *_vq) // host -> guest
 		head = virtio_next_avail_vq_desc(vq, iov, &olen, &ilen);
 
 		if (olen) {
-			// TODO: Make this an actual error!
-			printf("cons_receiveq ERROR: output buffers in console input queue!\n");
+			// virtio-v1.0-cs04 s5.3.6.1 Device Operation (console section)
+			VIRTIO_DRI_ERRX(vq->vqdev,
+				"The driver placed a device-readable buffer in console device receiveq."
+				" See virtio-v1.0-cs04 s5.3.6.1 Device Operation (console section)");
 		}
-
-
-
-		/*
-			TODO: Does the driver give us empty buffers? Does it even matter?
-			      i.e. we might get junk, but it's junk from the guest so giving
-			      the same junk back shouldn't be a problem. Unless it then thinks
-			      that that junk is input that it needs to process. So maybe
-			      we should clear it just in case? TODO: Check the virtio spec
-			      to see if providing clean buffers is the responsibility of the
-			      device or the driver.
-		*/
-
 
 		// TODO: Some sort of console abort (e.g. type q and enter to quit)
 		// readv from stdin as much as we can (either to end of buffers or end of input)
 		num_read = readv(0, iov, ilen);
 		if (num_read < 0) {
-			exit(0); // some error happened TODO better error handling here
+			exit(0); // TODO: some error happened TODO better error handling here
 		}
 
 		// You pass the number of bytes written to virtio_add_used_desc

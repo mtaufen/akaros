@@ -79,7 +79,7 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
 
-	// virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization (MMIO)
+	// virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization (MMIO section)
 	if (mmio_dev->vqdev->dev_id == 0
 		&& offset != VIRTIO_MMIO_MAGIC_VALUE
 		&& offset != VIRTIO_MMIO_VERSION
