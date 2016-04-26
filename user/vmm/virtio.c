@@ -2,9 +2,25 @@
 // Code in here is based on lguest.c by Rusty Russel, which is
 // distributed under the GNU General Public License.
 
-#include <vmm/virtio.h>
 #include <sys/eventfd.h>
 #include <sys/uio.h>
+#include <vmm/virtio.h>
+
+// TODO: Rename this to something more succinct and understandable!
+// Based on the add_used function in lguest.c
+// Adds descriptor chain to the used ring of the vq
+void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
+{
+	// NOTE: len is the total length of the descriptor chain (in bytes)
+	//       that was written to.
+	//       So you should pass 0 if you didn't write anything, and pass
+	//       the number of bytes you wrote otherwise.
+	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].id = head;
+	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].len = len;
+	// TODO: what does this wmb actually end up compiling as now that we're out of linux?
+	wmb(); // So the values get written to the used buffer before we update idx
+	vq->vring.used->idx++;
+}
 
 // TODO: Cleanup. maybe rename too
 // For traversing the linked list of descriptors
@@ -124,21 +140,30 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		// we're at table of descriptors chained by `next`, and since they are chained we can
 		// handle them the same way as direct descriptors once we're through that indirection.
 		if (desc[i].flags & VRING_DESC_F_INDIRECT) {
-			// TODO: lguest says bad_driver if they gave us an indirect desc but didn't set the right
-			//       feature bit for indirect descs. Not gonna check that for now, since I might rearrange
-			//       where the feature bits live, and it won't be particularly dangerous since we live in
-			//       a bubble for the time being. But we should start checking that in the future.
-			//       Before the bubble bursts.
+			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
+			if (!(vq->vqdev & VIRTIO_RING_F_INDIRECT_DESC))
+				VIRTIO_DRI_ERRX(vq->vqdev,
+					"The driver must not set the INDIRECT flag on a descriptor"
+					" if the INDIRECT_DESC feature was not negotiated.");
 
 			// TODO: Should also error if we find an indirect within an indirect (only one table per desc)
 			//       lguest seems to interpret this as "the only indirect desc can be the first in the chain"
 			//       I trust Rusty on that interpretation. (desc != vq->vring.desc is a bad_driver)
+			// TODO: Only the first in the chain! is not the correct interpretation. s2.4.5.3.2 says
+			//       you MUST handle the case where you have normal chained descriptors before a single
+			//       indirect descriptor
+			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
 			if (desc != vq->vring.desc)
-				printf("Bad! Indirect desc within indirect desc!\n");
+				VIRTIO_DRI_ERRX(vq->vqdev,
+					"The driver must not set the INDIRECT flag on a descriptor"
+					" within an indirect descriptor."
+					" See virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors");
 
-			// TODO: handle error (again, see lguest's bad_driver_vq) if these checks fail too
-			if (desc[i].flags & VRING_DESC_F_NEXT) // can't set NEXT if you're INDIRECT (e.g. table vs linked list entry)
-				printf("virtio Error: indirect and next both set\n");
+			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
+			if (desc[i].flags & VRING_DESC_F_NEXT)
+				VIRTIO_DRI_ERRX(vq->vqdev,
+					"The driver must not set both the INDIRECT and NEXT flags on a descriptor."
+					" See virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors");
 
 			if (desc[i].len % sizeof(struct vring_desc)) // nonzero mod indicates wrong table size
 				printf("virtio Error; bad size for indirect table\n");
@@ -194,9 +219,11 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 			(*olen)++;
 		}
 
+		// virtio-v1.0-cs04 s2.4.5.2 The Virtqueue Descriptor Table
 		if (*olen + *ilen > max) {
-			// TODO: make this an actual error!
-			printf("The descriptor probably looped somewhere! BAD! (*olen + *ilen > max)\n");
+			VIRTIO_DRI_ERRX(vq->vqdev,
+				"The driver must ensure that there are no loops in the"
+				" descriptor chain it provides!");
 		}
 
 
@@ -204,20 +231,4 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 
 	return head;
 
-}
-
-// TODO: Rename this to something more succinct and understandable!
-// Based on the add_used function in lguest.c
-// Adds descriptor chain to the used ring of the vq
-void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
-{
-	// NOTE: len is the total length of the descriptor chain (in bytes)
-	//       that was written to.
-	//       So you should pass 0 if you didn't write anything, and pass
-	//       the number of bytes you wrote otherwise.
-	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].id = head;
-	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].len = len;
-	// TODO: what does this wmb actually end up compiling as now that we're out of linux?
-	wmb(); // So the values get written to the used buffer before we update idx
-	vq->vring.used->idx++;
 }
