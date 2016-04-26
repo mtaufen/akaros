@@ -95,6 +95,13 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		}
 	}
 
+	// Warn if FAILED status bit is set.
+	if (mmio_dev->status & VIRTIO_CONFIG_S_FAILED) {
+		VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+			"The FAILED status bit is set."
+			" The driver should probably reset the device before continuing.");
+	}
+
 	if (offset >= VIRTIO_MMIO_CONFIG) {
 		// TODO: Implement reading the device config space
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
@@ -210,10 +217,19 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		return;
 	}
 
+	// Warn if FAILED and trying to do something that is definitely not a reset.
+	if (offset != VIRTIO_MMIO_STATUS
+		&& (mmio_dev->status & VIRTIO_CONFIG_S_FAILED)) {
+		VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+			"The FAILED status bit is set."
+			" The driver should probably reset the device before continuing.");
+	}
+
 	if (offset >= VIRTIO_MMIO_CONFIG) {
 		// TODO: Implement writing the device config space
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to write the device configuration space! Not yet implemented!");
 	}
+
 
 
 // TODO: note that some comments are direct from the virtio mmio spec, and some of my notes too.
@@ -229,7 +245,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 
 		// Device feature flags activated by the driver
 		case VIRTIO_MMIO_DRIVER_FEATURES:
-			if (mmio_dev->dri_feat_sel) {
+			if (mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver may not accept new feature bits offered by"
+					" the device after setting FEATURES_OK."); // TODO: But is it allowed to toggle already-accepted feature bits?
+			else if (mmio_dev->dri_feat_sel) {
 				mmio_dev->vqdev->dri_feat &= 0xffffffff; // clear high 32 bits
 				mmio_dev->vqdev->dri_feat |= ((uint64_t)(*value) << 32); // write high 32 bits
 			} else {
@@ -256,7 +276,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			break;
 
 		// Virtual queue size
-		// Queue size is the number of elements in the queue, thus in the
+		// The queue size is the number of elements in the queue, thus in the
 		// Descriptor Table, the Available Ring and the Used Ring. Writes
 		// notify the device what size queue the driver will use.
 		// This applies to the queue selected by writing to QueueSel.
@@ -277,7 +297,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Writing a queue index to this register notifies the device that
 		// there are new buffers to process in that queue.
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
-			if (!(mmio_dev->status & DRIVER_OK))
+			if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER_OK))
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 					"Attempt to notify the device before setting"
 					" DRIVER_OK status bit.");
@@ -307,15 +327,20 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Writing non-zero values to this register sets the status flags.
 		// Writing zero (0x0) to this register triggers a device reset.
 		case VIRTIO_MMIO_STATUS:
-			fprintf(stderr, "Attempting to set status to 0x%x\n", *value); // TODO: remove when done
-
 			if (*value == 0)
 				virtio_mmio_reset(mmio_dev);
 			// virtio-v1.0-cs04 s2.1.1. driver must NOT clear a status bit
 			else if (mmio_dev->status & ~(*value)) {
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 					"The driver must not clear any device status bits,"
-					" except for a reset of the device.");
+					" except as a result of resetting the device.");
+			}
+			// virtio-v1.0-cs04 s2.1.1. MUST reset before re-init if FAILED set
+			else if (mmio_dev->status & VIRTIO_CONFIG_S_FAILED
+				&&   mmio_dev->status != *value) { // allow them to set the same status value again, though
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must reset the device after setting the FAILED"
+					" status bit, before attempting to re-initialize the device.");
 			}
 
 			// NOTE: If a bit is not set in value, then at this point it
@@ -376,7 +401,6 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				    	& ~mmio_dev->vqdev->dev_feat)) {
 					*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
 				}
-				fprintf(stderr, "Seriously attempting to set status to 0x%x\n", *value); // TODO: remove when done
 				// Device status is only a byte wide.
 				mmio_dev->status = *value & 0xff;
 			}

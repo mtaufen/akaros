@@ -14,7 +14,7 @@
 
 // Print warnings caused by incorrect driver behavior
 #define VIRTIO_DRI_WARNX(dev, fmt, ...) \
-	warnx("\n\tVirtio Device: %s:\n\t\tWarning, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
+	warnx("\n\tVirtio Device: %s:\n\t\tWarning, driver behaved suspiciously. " fmt, (dev)->name, ## __VA_ARGS__)
 
 
 struct virtio_vq {
