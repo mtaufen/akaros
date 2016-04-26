@@ -277,13 +277,16 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Writing a queue index to this register notifies the device that
 		// there are new buffers to process in that queue.
 		case VIRTIO_MMIO_QUEUE_NOTIFY:
-			if (*value < mmio_dev->vqdev->num_vqs) {
+			if (!(mmio_dev->status & DRIVER_OK))
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"Attempt to notify the device before setting"
+					" DRIVER_OK status bit.");
+			else if (*value < mmio_dev->vqdev->num_vqs) {
 				notified_queue = &mmio_dev->vqdev->vqs[*value];
 
-				if (notified_queue->eventfd > 0) {
-					// kick the queue's service thread
+				// kick the queue's service thread
+				if (notified_queue->eventfd > 0)
 					eventfd_write(notified_queue->eventfd, 1);
-				}
 				// TODO: Should we panic if there's no valid eventfd?
 			}
 			break;
