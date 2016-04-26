@@ -165,6 +165,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 					"The driver must not set both the INDIRECT and NEXT flags on a descriptor."
 					" See virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors");
 
+			// TODO: Better error message, more descriptive of what this error indicates.
 			if (desc[i].len % sizeof(struct vring_desc)) // nonzero mod indicates wrong table size
 				printf("virtio Error; bad size for indirect table\n");
 
@@ -175,21 +176,12 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 			desc = (void *)desc[i].addr; // TODO: check that this pointer isn't goofy
 			i = 0;
 
-
-			// TODO: Make this a real error too. The driver MUST NOT create a descriptor chain longer
-			//       than the Queue Size of the device.
-			// Mike XXX: Where did we put the queue size of the device? lguest has it on pci config
-			//           since we're not pci, I think we want vq->vring.num. In fact, in lguest vring.num
-			//           is the same as pci config's queue size, and we are going to let the driver
-			//           set the vring.num for mmio (I figure), since I think this is where we'll put
-			//           the thing written to the QueueNum register (how big the queues the driver will
-			//           use are).
-			// TODO: do we allow the driver to write something greater than QueueNumMax to QueueNum?
-			//       checking both vring.num and qnum_max for now, need to double check whether we
-			//       actually just need vring.num to be checked.
-			if (max > vq->vring.num || max > vq->qnum_max) {
-				//TODO make this an actual error
-				printf("indirect desc has too many entries. number greater than vq->qnum_max\n");
+			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
+			if (max > vq->vring.num) {
+				VIRTIO_DRI_ERRX(vq->vqdev,
+					"The driver must not create a descriptor chain longer"
+					" than the queue size of the device."
+					" See virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors");
 			}
 		}
 
