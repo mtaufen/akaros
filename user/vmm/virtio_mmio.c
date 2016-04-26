@@ -161,7 +161,8 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 			if (!(mmio_dev->vqdev->dev_feat & (1<<VIRTIO_F_VERSION_1)))
 				VIRTIO_DEV_ERRX(mmio_dev->vqdev,
 					"The device must offer the VIRTIO_F_VERSION_1"
-					" feature bit (bit 32).");
+					" feature bit (bit 32). You didn't."
+					" You must be a bad person.");
 
 			if (mmio_dev->dev_feat_sel) // high 32 bits requested
 				return mmio_dev->vqdev->dev_feat >> 32;
