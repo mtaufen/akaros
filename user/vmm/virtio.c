@@ -183,9 +183,12 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 			// output descriptor, check that this is *before* we read any input descriptors
 			// and then increment *olen if we're ok
 
-			// TODO: Make this an actual error
+			// virtio-v1.0-cs04 s2.4.4.2 Message Framing
 			if (*ilen) {
-				printf("Bad! Output descriptor came after an input descriptor!\n");
+				VIRTIO_DRI_ERRX(vq->vqdev,
+					"Device detected an output descriptor after an input descriptor."
+					" The driver must place any device-writeable descriptor elements"
+					" after all device-readable descriptor elements.");
 			}
 
 			(*olen)++;
