@@ -27,7 +27,8 @@ void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
 // TODO: Cleanup. maybe rename too
 // For traversing the linked list of descriptors
 // Also based on Linux's lguest.c
-static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max)
+static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max
+	struct virtio_vq_dev *vqdev) // The vqdev is just for the error message.
 {
 	uint32_t next;
 
@@ -41,10 +42,10 @@ static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max)
 	// TODO: what does this wmb actually end up compiling as now that we're out of linux?
 	wmb(); // just because lguest put it here. not sure why they did that yet.
 
-	// TODO: Make this an actual error with a real error message
-	// TODO: Figure out what lguest.c's "bad_driver" function does
 	if (next >= max) {
-		printf("NONONONONONO. NO!\nYou can not tell me I have a desc at an index outside the queue.\nYou liar!\nvmrunkernel.c-get_next_desc\n");
+		VIRTIO_DRI_ERRX(vqdev,
+			"The next descriptor index in the chain provided by the driver is"
+			" greater than the maximum allowed size of its queue.");
 	}
 
 	return next;
