@@ -17,8 +17,10 @@ void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
 	//       the number of bytes you wrote otherwise.
 	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].id = head;
 	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].len = len;
-	// TODO: what does this wmb actually end up compiling as now that we're out of linux?
-	wmb(); // So the values get written to the used buffer before we update idx
+
+	// TODO: Use this wmb() or wmb_f() need to look at Linux barrier defns
+	// virtio-v1.0-cs04 s2.4.8.2 The Virtqueue Used Ring
+	wmb(); // The device MUST set len prior to updating the used idx, hence wmb()
 	vq->vring.used->idx++;
 }
 
@@ -169,8 +171,9 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 			if (desc[i].len % sizeof(struct vring_desc)) // nonzero mod indicates wrong table size
 				printf("virtio Error; bad size for indirect table\n");
 
-			// NOTE: Virtio spec says the device MUST ignore the write-only flag in the
-			//       descriptor for an indirect table. So we ignore it.
+			// NOTE: virtio-v1.0-cs04 s2.4.5.3.2 Indirect Descriptors says that the
+			//       device MUST ignore the write-only flag in the descriptor that
+			//       refers to an indirect table. So we ignore it.
 
 			max = desc[i].len / sizeof(struct vring_desc);
 			desc = (void *)desc[i].addr; // TODO: check that this pointer isn't goofy

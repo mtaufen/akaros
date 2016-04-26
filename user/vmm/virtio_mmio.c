@@ -53,10 +53,17 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 
 	fprintf(stderr, "virtio mmio device reset: %s\n", mmio_dev->vqdev->name);
 
+	// TODO: Probably want to do this on a reset, double check
 	mmio_dev->vqdev->dri_feat = 0;
-	mmio_dev->status = 0;
-	mmio_dev->isr = 0;
 
+	// virtio-v1.0-cs04 s2.1.2 Device Status Field
+	// The device MUST initialize device status to 0 upon reset
+	mmio_dev->status = 0;
+
+	// virtio-v1.0-cs04 s4.2.2.1 MMIO Device Register Layout
+	// Upon reset, the device MUST clear all bits in InterruptStatus and...
+	mmio_dev->isr = 0;
+	// ...ready bits in the QueueReady register for all queues in the device.
 	for (i = 0; i < mmio_dev->vqdev->num_vqs; ++i) {
 		// TODO: Should probably kill the handler thread before doing
 		//       anything else. MUST NOT process buffers until reinit!
@@ -66,7 +73,8 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 		mmio_dev->vqdev->vqs[i].last_avail = 0;
 	}
 
-// TODO: Put parts of the virito spec relating to reset in here
+	// TODO: The device MUST NOT consume buffers or notify the driver before DRIVER_OK
+	// TODO: Put parts of the virito spec relating to reset in here
 
 	virtio_mmio_reset_cfg(mmio_dev);
 
@@ -144,9 +152,17 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		case VIRTIO_MMIO_DEVICE_FEATURES:
 			if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER))
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-				         "Attempt to read device features before setting the DRIVER status bit."
+				         "Attempt to read device features before setting"
+				         " the DRIVER status bit."
 				         " See virtio-v1.0-cs04 s3.1.1."
-				         " 0x%x", mmio_dev->status);
+				         " Current status is 0x%x", mmio_dev->status);
+
+			// virtio-v1.0-cs04 s6.2 Reserved Feature Bits
+			if (!(mmio_dev->vqdev->dev_feat & (1<<VIRTIO_F_VERSION_1)))
+				VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+					"The device must offer the VIRTIO_F_VERSION_1"
+					" feature bit (bit 32).");
+
 			if (mmio_dev->dev_feat_sel) // high 32 bits requested
 				return mmio_dev->vqdev->dev_feat >> 32;
 			return mmio_dev->vqdev->dev_feat; // low 32 bits requested
@@ -157,8 +173,7 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		// Applies to the queue selected by writing to QueueSel.
 		case VIRTIO_MMIO_QUEUE_NUM_MAX:
 		// TODO: Are there other cases that count as "queue not available"
-		// NOTE: Returning 0 here if !qready causes linux's driver
-		//       to fail to initialize the vqs.
+		// NOTE: !qready does not count as queue not available.
 			if (mmio_dev->qsel >= mmio_dev->vqdev->num_vqs)
 				return 0;
 			return mmio_dev->vqdev->vqs[mmio_dev->qsel].qnum_max;
@@ -309,9 +324,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Virtual queue ready bit
 		// Writing one (0x1) to this register notifies the device that it can
 		// execute requests from the virtual queue selected by QueueSel.
-		// TODO: If the driver writes 0x0 to queue ready, we probably have to make sure we
-		// 		 stop processing the queue.
 		case VIRTIO_MMIO_QUEUE_READY:
+		// TODO: If the driver writes 0x0 to queue ready, we probably have to make sure we
+		// 		 stop processing the queue, which probably means we cancel processing of buffers,
+		//       or just wait for everything in flight to finish, before we finally write 0 here.
+		//       I wonder if I can put a signal handler on a thread for a signal that means
+		//       "stop/finish up your processing and then set your queue's qready to 0x0"?
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs)
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = *value;
 			break;
@@ -419,6 +437,9 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				// NOTE: Don't set the FEATURES_OK bit unless the driver
 				//       activated a subset of the supported features prior to
 				//       attempting to set FEATURES_OK.
+
+				// TODO: We still need to check that no feature is accepted which
+				//       depends on a not-accepted feature! This will be a lot of work...
 				if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
 				    && (*value & VIRTIO_CONFIG_S_FEATURES_OK)
 				    && (mmio_dev->vqdev->dri_feat
