@@ -412,6 +412,13 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
 				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 16)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's descriptor table (%p) is"
+						" misaligned. Address should be a multiple of 16.");
+
 				// assign the new value to the queue desc
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
 			}
@@ -424,6 +431,13 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				                  & ((uint64_t)0xffffffff)); // clear high bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr
 				                  | ((uint64_t)(*value) << 32)); // write high bits
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 16)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's descriptor table (%p) is"
+						" misaligned. Address should be a multiple of 16.");
+
 				// assign the new value to the queue desc
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
 			}
@@ -435,6 +449,13 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
 				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 2)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's available ring (%p) is"
+						" misaligned. Address should be a multiple of 2.");
+
 				// assign the new value to the queue avail
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
 			}
@@ -447,6 +468,13 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				                  & ((uint64_t)0xffffffff)); // clear high bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr
 				                  | ((uint64_t)(*value) << 32)); // write high bits
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 2)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's available ring (%p) is"
+						" misaligned. Address should be a multiple of 2.");
+
 				// assign the new value to the queue avail
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
 			}
@@ -458,6 +486,13 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
 				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 4)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's used ring (%p) is"
+						" misaligned. Address should be a multiple of 4.");
+
 				// assign the new value to the queue used
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
 			}
@@ -470,6 +505,13 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				                  & ((uint64_t)0xffffffff)); // clear high bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr
 				                  | ((uint64_t)(*value) << 32)); // write high bits
+
+				// virtio-v1.0-cs04 s2.4 Virtqueues
+				if ((uint64_t)temp_ptr % 4)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Physical address of guest's used ring (%p) is"
+						" misaligned. Address should be a multiple of 4.");
+
 				// assign the new value to the queue used
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
 			}
