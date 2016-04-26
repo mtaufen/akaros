@@ -141,7 +141,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		// handle them the same way as direct descriptors once we're through that indirection.
 		if (desc[i].flags & VRING_DESC_F_INDIRECT) {
 			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
-			if (!(vq->vqdev & VIRTIO_RING_F_INDIRECT_DESC))
+			if (!(vq->vqdev->dri_feat & (1<<VIRTIO_RING_F_INDIRECT_DESC)))
 				VIRTIO_DRI_ERRX(vq->vqdev,
 					"The driver must not set the INDIRECT flag on a descriptor"
 					" if the INDIRECT_DESC feature was not negotiated.");
