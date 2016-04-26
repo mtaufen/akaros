@@ -79,6 +79,15 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
 
+	// virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization (MMIO)
+	if (mmio_dev->vqdev->dev_id == 0
+		&& offset != VIRTIO_MMIO_MAGIC_VALUE
+		&& offset != VIRTIO_MMIO_VERSION
+		&& offset != VIRTIO_MMIO_DEVICE_ID)
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+			"Attempt to read from a register not MagicValue, Version, or"
+			" DeviceID on a device whose DeviceID is 0x0");
+
 	// Return 0 for all registers except the magic number,
 	// the mmio version, and the device vendor when either
 	// there is no vqdev or no vqs on the vqdev.
@@ -216,6 +225,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// TODO: Is there a case where we want to provide an mmio transport with no vqdev backend?
 		return;
 	}
+
+	// virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization (MMIO)
+	if (mmio_dev->vqdev->dev_id == 0)
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+			"Attempt to write to a device whose DeviceID is 0x0");
 
 	// Warn if FAILED and trying to do something that is definitely not a reset.
 	if (offset != VIRTIO_MMIO_STATUS
