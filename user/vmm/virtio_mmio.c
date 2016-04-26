@@ -416,6 +416,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Queue's Descriptor Table 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_DESC_LOW:
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueDescLow on queue %d,"
+						" which has nonzero QueueReady.", mmio_dev->qsel);
+
 				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
 				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
@@ -434,6 +439,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Queue's Descriptor Table 64 bit long physical address, high 32
 		case VIRTIO_MMIO_QUEUE_DESC_HIGH:
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueDescHigh on queue %d,"
+						" which has nonzero QueueReady.", mmio_dev->qsel);
+
 				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
 				                  & ((uint64_t)0xffffffff)); // clear high bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr
@@ -453,6 +463,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Queue's Available Ring 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_AVAIL_LOW:
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueAvailLow on queue %d,"
+						" which has nonzero QueueReady.", mmio_dev->qsel);
+
 				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
 				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
@@ -471,6 +486,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Queue's Available Ring 64 bit long physical address, high 32
 		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH:
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueAvailHigh on queue %d,"
+						" which has nonzero QueueReady.", mmio_dev->qsel);
+
 				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
 				                  & ((uint64_t)0xffffffff)); // clear high bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr
@@ -490,6 +510,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Queue's Used Ring 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_USED_LOW:
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueUsedLow on queue %d,"
+						" which has nonzero QueueReady.", mmio_dev->qsel);
+
 				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
 				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
@@ -508,6 +533,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Queue's Used Ring 64 bit long physical address, high 32
 		case VIRTIO_MMIO_QUEUE_USED_HIGH:
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				if (mmio_dev->vqdev->vqs[mmio_dev->qsel].qready != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"Attempt to access QueueUsedHigh on queue %d,"
+						" which has nonzero QueueReady.", mmio_dev->qsel);
+
 				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
 				                  & ((uint64_t)0xffffffff)); // clear high bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr
