@@ -75,12 +75,10 @@ struct virtio_vq_dev {
 	// The virtio transport dev that contains this vqdev. i.e. struct virtio_mmio_dev
 	void *transport_dev;
 
-	// The number of vqs on this device. You MUST set this to the same number of
-	// virtio_vqs that you put in the vqs array on the virtio_vq_dev.
-	int num_vqs; // TODO: can we make this unsigned?
+	uint32_t num_vqs;
 
 	// Flexible array of vqs on this device
-	struct virtio_vq vqs[]; // TODO: QEMU macros a fixed-length in here, that they just make the max number of queues
+	struct virtio_vq vqs[];
 };
 
 // TODO: Rename this fn
