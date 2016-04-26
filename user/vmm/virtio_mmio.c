@@ -140,11 +140,10 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		// is ready to process or zero (0x0) if the queue is not available.
 		// Applies to the queue selected by writing to QueueSel.
 		case VIRTIO_MMIO_QUEUE_NUM_MAX:
-		// TODO: Is !qready the same as not available?
+		// TODO: Are there other cases that count as "queue not available"
 		// NOTE: Returning 0 here if !qready causes linux's driver
 		//       to fail to initialize the vqs.
 			if (mmio_dev->qsel >= mmio_dev->vqdev->num_vqs)
-				//|| !mmio_dev->vqdev->vqs[mmio_dev->qsel].qready)
 				return 0;
 			return mmio_dev->vqdev->vqs[mmio_dev->qsel].qnum_max;
 
@@ -250,11 +249,10 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// QueueUsedLow and QueueUsedHigh apply to. The index number of the
  		// first queue is zero (0x0).
 		case VIRTIO_MMIO_QUEUE_SEL:
-		// TODO: If we make sure it's less than num_vqs, we probably don't need to bounds-check
-		//       in the read reg function.
-			if (*value < mmio_dev->vqdev->num_vqs) {
-				mmio_dev->qsel = *value;
-			}
+		// NOTE: We must allow the driver to write whatever they want to
+		//       QueueSel, because QueueNumMax contians 0x0 for invalid
+		//       QueueSel incices.
+			mmio_dev->qsel = *value;
 			break;
 
 		// Virtual queue size
@@ -263,14 +261,16 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// notify the device what size queue the driver will use.
 		// This applies to the queue selected by writing to QueueSel.
 		case VIRTIO_MMIO_QUEUE_NUM:
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.num = *value;
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs)
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.num = *value;
 			break;
 
 		// Virtual queue ready bit
 		// Writing one (0x1) to this register notifies the device that it can
 		// execute requests from the virtual queue selected by QueueSel.
 		case VIRTIO_MMIO_QUEUE_READY:
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = *value;
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs)
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = *value;
 			break;
 
 		// Queue notifier
@@ -381,59 +381,71 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 
 		// Queue's Descriptor Table 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_DESC_LOW:
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
-			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			// assign the new value to the queue desc
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
+				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
+				// assign the new value to the queue desc
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
+			}
 			break;
 
 		// Queue's Descriptor Table 64 bit long physical address, high 32
 		case VIRTIO_MMIO_QUEUE_DESC_HIGH:
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
-			                  & ((uint64_t)0xffffffff)); // clear high bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr
-			                  | ((uint64_t)(*value) << 32)); // write high bits
-			// assign the new value to the queue desc
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
+				                  & ((uint64_t)0xffffffff)); // clear high bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr
+				                  | ((uint64_t)(*value) << 32)); // write high bits
+				// assign the new value to the queue desc
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
+			}
 			break;
 
 		// Queue's Available Ring 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_AVAIL_LOW:
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
-			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			// assign the new value to the queue avail
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
+				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
+				// assign the new value to the queue avail
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
+			}
 			break;
 
 		// Queue's Available Ring 64 bit long physical address, high 32
 		case VIRTIO_MMIO_QUEUE_AVAIL_HIGH:
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
-			                  & ((uint64_t)0xffffffff)); // clear high bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr
-			                  | ((uint64_t)(*value) << 32)); // write high bits
-			// assign the new value to the queue avail
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
+				                  & ((uint64_t)0xffffffff)); // clear high bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr
+				                  | ((uint64_t)(*value) << 32)); // write high bits
+				// assign the new value to the queue avail
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
+			}
 			break;
 
 		// Queue's Used Ring 64 bit long physical address, low 32
 		case VIRTIO_MMIO_QUEUE_USED_LOW:
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
-			                  & ((uint64_t)0xffffffff << 32)); // clear low bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
-			// assign the new value to the queue used
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
+				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
+				// assign the new value to the queue used
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
+			}
 			break;
 
 		// Queue's Used Ring 64 bit long physical address, high 32
 		case VIRTIO_MMIO_QUEUE_USED_HIGH:
-			temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
-			                  & ((uint64_t)0xffffffff)); // clear high bits
-			temp_ptr = (void *) ((uint64_t)temp_ptr
-			                  | ((uint64_t)(*value) << 32)); // write high bits
-			// assign the new value to the queue used
-			mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
+				                  & ((uint64_t)0xffffffff)); // clear high bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr
+				                  | ((uint64_t)(*value) << 32)); // write high bits
+				// assign the new value to the queue used
+				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
+			}
 			break;
 
 		// Read-only register offsets:
