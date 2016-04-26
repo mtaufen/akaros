@@ -283,7 +283,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		case VIRTIO_MMIO_QUEUE_NUM:
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
 				// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
-				if (*value < mmio_dev->vqdev->vqs[mmio_dev->qsel].qnum_max)
+				if (*value <= mmio_dev->vqdev->vqs[mmio_dev->qsel].qnum_max)
 					mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.num = *value;
 				else
 					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
@@ -295,6 +295,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// Virtual queue ready bit
 		// Writing one (0x1) to this register notifies the device that it can
 		// execute requests from the virtual queue selected by QueueSel.
+		// TODO: If the driver writes 0x0 to queue ready, we probably have to make sure we
+		// 		 stop processing the queue.
 		case VIRTIO_MMIO_QUEUE_READY:
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs)
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = *value;
@@ -325,8 +327,9 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		case VIRTIO_MMIO_INTERRUPT_ACK:
 			// TODO: Is there anything the device actually has to DO on an interrupt ack
 			//       other than clear the acked interrupt bits in isr?
-			// TODO: If the driver MUST NOT set anything else, should we fail here if they try?
-			*value &= 0b11; // only the lower two bits matter, driver MUST NOT set anything else
+			if (*value & ~0b11)
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"Attempt to set undefined bits in InterruptACK register.");
 			mmio_dev->isr &= ~(*value);
 			break;
 
