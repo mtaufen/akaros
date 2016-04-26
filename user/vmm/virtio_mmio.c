@@ -300,7 +300,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER_OK))
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 					"Attempt to notify the device before setting"
-					" DRIVER_OK status bit.");
+					" the DRIVER_OK status bit.");
 			else if (*value < mmio_dev->vqdev->num_vqs) {
 				notified_queue = &mmio_dev->vqdev->vqs[*value];
 
