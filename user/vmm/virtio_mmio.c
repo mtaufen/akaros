@@ -344,6 +344,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 						"Attempt to write value greater than QueueNumMax"
 						" to QueueNum register.");
 			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueNum register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
 		// Virtual queue ready bit
@@ -358,6 +364,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
 				check_vring(&mmio_dev->vqdev->vqs[mmio_dev->qsel]);
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = *value;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueReady register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
 			break;
 
@@ -503,6 +515,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				// assign the new value to the queue desc
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
 			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueDescLow register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
 		// Queue's Descriptor Table 64 bit long physical address, high 32
@@ -527,6 +545,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				// assign the new value to the queue desc
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc = temp_ptr;
 			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueDescHigh register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
 		// Queue's Available Ring 64 bit long physical address, low 32
@@ -549,6 +573,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 
 				// assign the new value to the queue avail
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueAvailLow register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
 			break;
 
@@ -574,6 +604,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				// assign the new value to the queue avail
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail = temp_ptr;
 			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueAvailHigh register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
+			}
 			break;
 
 		// Queue's Used Ring 64 bit long physical address, low 32
@@ -596,6 +632,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 
 				// assign the new value to the queue used
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueUsedLow register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
 			break;
 
@@ -620,6 +662,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 
 				// assign the new value to the queue used
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used = temp_ptr;
+			}
+			else {
+				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+					"Attempt to write QueueUsedHigh register for invalid QueueSel."
+					" QueueSel was %u, but the number of queues is %u.",
+					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
 			break;
 
