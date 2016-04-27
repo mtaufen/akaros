@@ -39,7 +39,7 @@ struct virtio_vq {
 
 	// The maximum number of elements in the queue that the device is ready to process
 	// Reads from the register corresponding to this value return 0x0 if the queue is
-	// not available.
+	// not available. The size of a queue is always a power of 2.
 	int qnum_max;
 
 	// The driver writes 0x1 to qready to tell the device

@@ -376,7 +376,7 @@ static void *cons_receiveq_fn(void *_vq) // host -> guest
 	uint32_t olen, ilen;
 	uint32_t i, j;
 	// TODO: I think your iov just needs to be at least as big as your QueueNumMax to be safe.
-	static struct iovec iov[1024];
+	static struct iovec iov[64];
 	int num_read;
 
 	printf("cons_receiveq_fn called.\n\targ: %p, qname: %s\n", vq, vq->name);
@@ -421,7 +421,7 @@ static void *cons_transmitq_fn(void *_vq) // guest -> host
 	uint32_t olen, ilen;
 	uint32_t i, j;
 	// TODO: I think your iov just needs to be at least as big as your QueueNumMax to be safe.
-	static struct iovec iov[1024];
+	static struct iovec iov[64];
 
 	while(1) {
 
