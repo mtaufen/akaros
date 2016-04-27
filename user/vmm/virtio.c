@@ -168,11 +168,10 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 					"The driver must not set the INDIRECT flag on a descriptor"
 					" if the INDIRECT_DESC feature was not negotiated.");
 
-			//TODO:lguest seems to interpret this as "the only indirect desc can be the first in the chain"
-			//       I trust Rusty on that interpretation. (desc != vq->vring.desc is a bad_driver)
-			// Only the first in the chain! is not the correct interpretation. s2.4.5.3.2 says
-			//       you MUST handle the case where you have normal chained descriptors before a single
-			//       indirect descriptor
+			// NOTE: desc is only modified when we detect an indirect
+			//       descriptor, so our implementation works whether there is an
+			//       indirect descriptor at the very beginning OR at the very
+			//       end of the chain (virtio-v1.0-cs04 s2.4.5.3.2 compliant)
 			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
 			if (desc != vq->vring.desc)
 				VIRTIO_DRI_ERRX(vq->vqdev,
