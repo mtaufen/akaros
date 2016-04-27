@@ -6,8 +6,7 @@
 #include <sys/uio.h>
 #include <vmm/virtio.h>
 
-// TODO: Doc this
-// based on _check_pointer in lguest.c
+// based on _check_pointer in Linux's lguest.c
 void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
                            uint32_t size, char *file, uint32_t line)
 {
@@ -25,10 +24,9 @@ void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
 	return (void *)addr;
 }
 
-// TODO: Cleanup. maybe rename too
-// For traversing the linked list of descriptors
-// Also based on Linux's lguest.c
-static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max,
+// For traversing the chain of descriptors
+// based on next_desc Linux's lguest.c
+static uint32_t next_desc(struct vring_desc *desc, uint32_t i, uint32_t max,
 		struct virtio_vq *vq) // The vq is just for the error message.
 {
 	uint32_t next;
@@ -53,9 +51,8 @@ static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max,
 	return next;
 }
 
-// TODO: Rename this to something more succinct and understandable!
-// Based on the add_used function in lguest.c
 // Adds descriptor chain to the used ring of the vq
+// based on add_used in Linux's lguest.c
 void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
 {
 	// NOTE: len is the total length of the descriptor chain (in bytes)
@@ -70,12 +67,10 @@ void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
 	vq->vring.used->idx++;
 }
 
-
-// TODO: Rename this fn
 // TODO: Need to make sure we don't overflow iov. Right now we're just kind of
 //       trusting that whoever provided the iov made it at least as big as
 //       qnum_max, but maybe we shouldn't be that trusting.
-// Based on wait_for_vq_desc in Linux lguest.c
+// Based on wait_for_vq_desc in Linux's'lguest.c
 uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
                             uint32_t *olen, uint32_t *ilen)
 {
@@ -113,7 +108,9 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 
 		if (eventfd_read(vq->eventfd, &event))
 			VIRTIO_DEV_ERRX(vq->vqdev,
-				"eventfd read failed while waiting for available descriptors\n");
+				"eventfd read failed while waiting for"
+				" available descriptors\n");
+
 		// Make sure vring.avail->idx has had a chance to update before our read
 		// The mfence instruction is invoked via mb_f in Akaros.
 		mb_f();
@@ -169,10 +166,9 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 					"The driver must not set the INDIRECT flag on a descriptor"
 					" if the INDIRECT_DESC feature was not negotiated.");
 
-			// TODO: Should also error if we find an indirect within an indirect (only one table per desc)
-			//       lguest seems to interpret this as "the only indirect desc can be the first in the chain"
+			//TODO:lguest seems to interpret this as "the only indirect desc can be the first in the chain"
 			//       I trust Rusty on that interpretation. (desc != vq->vring.desc is a bad_driver)
-			// TODO: Only the first in the chain! is not the correct interpretation. s2.4.5.3.2 says
+			// Only the first in the chain! is not the correct interpretation. s2.4.5.3.2 says
 			//       you MUST handle the case where you have normal chained descriptors before a single
 			//       indirect descriptor
 			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
@@ -196,9 +192,9 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 					" length of the indirect table provided by the driver."
 					" Bad table size.");
 
-			// NOTE: virtio-v1.0-cs04 s2.4.5.3.2 Indirect Descriptors says that the
-			//       device MUST ignore the write-only flag in the descriptor that
-			//       refers to an indirect table. So we ignore it.
+			// NOTE: virtio-v1.0-cs04 s2.4.5.3.2 Indirect Descriptors
+			//       says that the device MUST ignore the write-only flag in the
+			//       descriptor that refers to an indirect table. So we ignore.
 
 			max = desc[i].len / sizeof(struct vring_desc);
 			desc = virtio_check_pointer(vq, desc[i].addr, desc[i].len,
@@ -250,7 +246,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		}
 
 
-	} while ((i = get_next_desc(desc, i, max, vq)) != max);
+	} while ((i = next_desc(desc, i, max, vq)) != max);
 
 	return head;
 

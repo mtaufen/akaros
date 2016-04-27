@@ -10,19 +10,23 @@
 
 // Print errors caused by incorrect driver behavior
 #define VIRTIO_DRI_ERRX(dev, fmt, ...) \
-	errx(1, "\n\tVirtio Device: %s:\n\t\tError, driver misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
+	errx(1, "\n\tVirtio Device: %s:\n\t\tError, driver misbehaved. "\
+		fmt, (dev)->name, ## __VA_ARGS__)
 
 // Print warnings caused by incorrect driver behavior
 #define VIRTIO_DRI_WARNX(dev, fmt, ...) \
-	warnx("\n\tVirtio Device: %s:\n\t\tWarning, driver behaved suspiciously. " fmt, (dev)->name, ## __VA_ARGS__)
+	warnx("\n\tVirtio Device: %s:\n\t\tWarning, driver behaved suspiciously. "\
+		fmt, (dev)->name, ## __VA_ARGS__)
 
 // Print errors caused by incorrect device behavior
 #define VIRTIO_DEV_ERRX(dev, fmt, ...) \
-	errx(1, "\n\tVirtio Device: %s:\n\t\tError, device misbehaved. " fmt, (dev)->name, ## __VA_ARGS__)
+	errx(1, "\n\tVirtio Device: %s:\n\t\tError, device misbehaved. "\
+		fmt, (dev)->name, ## __VA_ARGS__)
 
 // Print warnings caused by incorrect device behavior
 #define VIRTIO_DEV_WARNX(dev, fmt, ...) \
-	warnx("\n\tVirtio Device: %s:\n\t\tWarning, device behaved suspiciously. " fmt, (dev)->name, ## __VA_ARGS__)
+	warnx("\n\tVirtio Device: %s:\n\t\tWarning, device behaved suspiciously. "\
+		fmt, (dev)->name, ## __VA_ARGS__)
 
 
 
@@ -33,20 +37,21 @@ struct virtio_vq {
 	// The vqdev that contains this vq
 	struct virtio_vq_dev *vqdev;
 
-	// The vring contains pointers to the descriptor table and available and used rings
-	// as well as the number of elements in the queue.
+	// The vring contains pointers to the descriptor table and available and
+	// used rings as well as the number of elements in the queue.
 	struct vring vring;
 
-	// The maximum number of elements in the queue that the device is ready to process
-	// Reads from the register corresponding to this value return 0x0 if the queue is
-	// not available. The size of a queue is always a power of 2.
+	// The maximum number of elements in the queue that the device is ready to
+	// process. Reads from the register corresponding to this value return 0x0
+	// if the queue is not available. A queue's size is always a power of 2.
 	int qnum_max;
 
 	// The driver writes 0x1 to qready to tell the device
 	// that it can execute requests from this vq
 	uint32_t qready;
 
-	// The last vq.vring.avail->idx that the service function saw while processing the queue
+	// The last vq.vring.avail->idx that the service function saw while
+	// processing the queue
 	uint16_t last_avail;
 
 	// The service function that processes buffers for this queue
@@ -55,7 +60,7 @@ struct virtio_vq {
 	// The thread that the service function is running in
 	pthread_t srv_th;
 
-	// We write eventfd to wake up the service function; it blocks on eventfd read
+	// Write eventfd to wake up the service function; it blocks on eventfd read
 	int eventfd;
 };
 
@@ -72,7 +77,8 @@ struct virtio_vq_dev {
 	// The features supported by the driver (these are set by the guest)
 	uint64_t dri_feat;
 
-	// The virtio transport dev that contains this vqdev. i.e. struct virtio_mmio_dev
+	// The virtio transport dev that contains this vqdev.
+	// i.e. struct virtio_mmio_dev
 	void *transport_dev;
 
 	uint32_t num_vqs;
@@ -81,16 +87,16 @@ struct virtio_vq_dev {
 	struct virtio_vq vqs[];
 };
 
-// TODO: Rename this fn
+// Waits for the next available descriptor chain and writes the addresses
+// and sizes of the buffers it describes to an iovec to make them easy to use.
 // Based on wait_for_vq_desc in Linux lguest.c
 uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
                             uint32_t *olen, uint32_t *ilen);
 
-// TODO: Rename this to something more succinct and understandable!
-// Based on the add_used function in lguest.c
 // Adds descriptor chain to the used ring of the vq
+// Based on add_used in Linux's lguest.c
 void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len);
 
-// TODO: Probably rename this to something like virtio_check_desc_addr....
+// Validates memory regions provided by the guest's virtio driver
 void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
                            uint32_t size, char *file, uint32_t line);
