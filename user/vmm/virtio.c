@@ -147,10 +147,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 	desc = vq->vring.desc;
 	i = head;
 
-	// TODO: lguest manually checks that the pointers on the vring fields aren't goofy when the driver
-	//       initally says they are ready, we should probably do that somewhere too.
-
-	/*NOTE: (from lguest)
+	/*NOTE: (from lguest) TODO? double check this
 	 * We have to read the descriptor after we read the descriptor number,
 	 * but there's a data dependency there so the CPU shouldn't reorder
 	 * that: no rmb() required.
@@ -200,7 +197,10 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 			max = desc[i].len / sizeof(struct vring_desc);
 			desc = virtio_check_pointer(vq, desc[i].addr, desc[i].len,
 			                            __FILE__, __LINE__);
-			i = 0; // TODO: put a comment on this or something so people don't think it's a spurrious i = 0
+
+			// Now that desc is pointing at the table of indirect descriptors,
+			// we set i to 0 so that we can start walking that table
+			i = 0;
 
 			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
 			if (max > vq->vring.num) {
