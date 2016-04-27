@@ -147,12 +147,11 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 	desc = vq->vring.desc;
 	i = head;
 
-	/*NOTE: (from lguest) TODO? double check this
-	 * We have to read the descriptor after we read the descriptor number,
-	 * but there's a data dependency there so the CPU shouldn't reorder
-	 * that: no rmb() required.
-	 */
-
+	// NOTE (from lguest):
+	// We have to read the descriptor after we read the descriptor number,
+	// but there's a data dependency there so the CPU shouldn't reorder
+	// that: no rmb() required.
+	// Mike: The descriptor number is stored in i.
 
 	do {
 		// If it's an indirect descriptor, we travel through the layer of indirection and then
