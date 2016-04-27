@@ -20,15 +20,15 @@ void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
 
 	// TODO: Use this wmb() or wmb_f() need to look at Linux barrier defns
 	// virtio-v1.0-cs04 s2.4.8.2 The Virtqueue Used Ring
-	wmb(); // The device MUST set len prior to updating the used idx, hence wmb()
+	wmb(); // The device MUST set len prior to updating the used idx, hence wmb
 	vq->vring.used->idx++;
 }
 
 // TODO: Cleanup. maybe rename too
 // For traversing the linked list of descriptors
 // Also based on Linux's lguest.c
-static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max
-	struct virtio_vq_dev *vqdev) // The vqdev is just for the error message.
+static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max,
+		struct virtio_vq *vq) // The vq is just for the error message.
 {
 	uint32_t next;
 
@@ -43,9 +43,9 @@ static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max
 	wmb(); // just because lguest put it here. not sure why they did that yet.
 
 	if (next >= max) {
-		VIRTIO_DRI_ERRX(vqdev,
+		VIRTIO_DRI_ERRX(vq->vqdev,
 			"The next descriptor index in the chain provided by the driver is"
-			" outside than the maximum allowed size of its queue.");
+			" outside the bounds of the maximum allowed size of its queue.");
 	}
 
 	return next;
@@ -221,7 +221,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		}
 
 
-	} while ((i = get_next_desc(desc, i, max)) != max);
+	} while ((i = get_next_desc(desc, i, max, vq)) != max);
 
 	return head;
 

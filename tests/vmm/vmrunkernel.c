@@ -375,10 +375,7 @@ static void *cons_receiveq_fn(void *_vq) // host -> guest
 	uint32_t head;
 	uint32_t olen, ilen;
 	uint32_t i, j;
-	// TODO: scatterlist dvec. I think we need this to be big enough for the max buffers in a queue.
-	//       But I think that is set by the driver... for now I just made it really big. Don't really
-	//       want to dynamically allocate due to overhead. Maybe we'll arbitrarily define a MaxQueueNum
-	//       for our mmio devices and use that here.(I think that's what qemu does)
+	// TODO: I think your iov just needs to be at least as big as your QueueNumMax to be safe.
 	static struct iovec iov[1024];
 	int num_read;
 
@@ -423,10 +420,7 @@ static void *cons_transmitq_fn(void *_vq) // guest -> host
 	uint32_t head;
 	uint32_t olen, ilen;
 	uint32_t i, j;
-	// TODO: scatterlist dvec. I think we need this to be big enough for the max buffers in a queue.
-	//       But I think that is set by the driver... for now I just made it really big. Don't really
-	//       want to dynamically allocate due to overhead. Maybe we'll arbitrarily define a MaxQueueNum
-	//       for our mmio devices and use that here.(I think that's what qemu does)
+	// TODO: I think your iov just needs to be at least as big as your QueueNumMax to be safe.
 	static struct iovec iov[1024];
 
 	while(1) {
