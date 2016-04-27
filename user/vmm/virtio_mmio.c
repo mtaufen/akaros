@@ -219,11 +219,15 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		case VIRTIO_MMIO_QUEUE_USED_LOW:
 		case VIRTIO_MMIO_QUEUE_USED_HIGH:
 			// Read of write-only register
-			VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to read write-only device register offset 0x%x.", offset);
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to read write-only device register offset 0x%x.",
+				offset);
 			return 0;
 		default:
 			// Bad register offset
-			VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to read invalid device register offset 0x%x.", offset);
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to read invalid device register offset 0x%x.",
+				offset);
 			return 0;
 	}
 
@@ -681,11 +685,15 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		case VIRTIO_MMIO_INTERRUPT_STATUS:
 		case VIRTIO_MMIO_CONFIG_GENERATION:
 			// Write to read-only register
-			VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to write read-only device register offset 0x%x.", offset);
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to write read-only device register offset 0x%x.",
+				offset);
 			break;
 		default:
 			// Bad register offset
-			VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to write invalid device register offset 0x%x.", offset);
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to write invalid device register offset 0x%x.",
+				offset);
 			break;
 	}
 }
