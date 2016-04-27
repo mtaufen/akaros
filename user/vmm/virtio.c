@@ -189,9 +189,12 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 					" on a descriptor."
 					" See virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors");
 
-			// TODO: Better error message, more descriptive of what this error indicates.
-			if (desc[i].len % sizeof(struct vring_desc)) // nonzero mod indicates wrong table size
-				printf("virtio Error; bad size for indirect table\n");
+			// nonzero mod indicates wrong table size
+			if (desc[i].len % sizeof(struct vring_desc))
+				VIRTIO_DRI_ERRX(vq->vqdev,
+					"The size of a vring descriptor does not evenly divide the"
+					" length of the indirect table provided by the driver."
+					" Bad table size.");
 
 			// NOTE: virtio-v1.0-cs04 s2.4.5.3.2 Indirect Descriptors says that the
 			//       device MUST ignore the write-only flag in the descriptor that
