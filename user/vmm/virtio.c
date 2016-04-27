@@ -97,6 +97,8 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 	mb_f();
 
 	while (vq->last_avail == vq->vring.avail->idx) {
+		// We know the ring has updated when idx advances. We check == because
+		// idx is allowed to wrap around eventually.
 
 		// NOTE: I do not kick the guest with an irq here. I do that in
 		//       the queue service functions when it is necessary.
@@ -117,7 +119,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		mb_f();
 	}
 
-	// Read the desc num (head) after we detect the ring update (vq->last_avail != vq->vring.avail->idx)
+	// Read the desc num into head after we detect the ring update
 	// The lfence instruction is invoked via rmb_f in Akaros.
 	rmb_f();
 
@@ -147,11 +149,13 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 	desc = vq->vring.desc;
 	i = head;
 
-	// NOTE (from lguest):
-	// We have to read the descriptor after we read the descriptor number,
-	// but there's a data dependency there so the CPU shouldn't reorder
-	// that: no rmb() required.
-	// Mike: The descriptor number is stored in i.
+	// NOTE: (from lguest)
+	//       We have to read the descriptor after we read the descriptor number,
+	//       but there's a data dependency there so the CPU shouldn't reorder
+	//       that: no rmb() required.
+	//       Mike: The descriptor number is stored in i; what lguest means is
+	//             that data must flow from avail_ring to head to i before i
+	//             is used to index into desc.
 
 	do {
 		// If it's an indirect descriptor, we travel through the layer of indirection and then
