@@ -230,6 +230,15 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 	return 0;
 }
 
+// Based on check_virtqueue from lguest.c
+// We call this when the driver writes 0x1 to QueueReady
+static void check_vring(struct virtio_vq *vq) {
+	// First make sure that the pointers on the vring are all valid:
+	// virtio_check_pointer()
+
+	//
+}
+
 void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value)
 {
 	uint64_t offset = gpa - mmio_dev->addr;

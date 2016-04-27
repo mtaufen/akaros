@@ -90,3 +90,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 // Based on the add_used function in lguest.c
 // Adds descriptor chain to the used ring of the vq
 void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len);
+
+// TODO: Probably rename this to something like virtio_check_desc_addr....
+void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
+                           uint32_t size, char *file, uint32_t line);

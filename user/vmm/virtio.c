@@ -7,9 +7,9 @@
 #include <vmm/virtio.h>
 
 // TODO: Doc this
-// based on _check_pointer in lguest.c
-static void *check_pointer(struct virtio_vq *vq, uint64_t addr,
-                           uint32_t size, uint32_t line)
+// based on _virtio_check_pointer in lguest.c
+void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
+                           uint32_t size, char *file, uint32_t line)
 {
 	// TODO: Right now, we just check that the pointer + the size doesn't wrap around.
 	//       we could probably also check that the pointer isn't outside the
@@ -20,7 +20,7 @@ static void *check_pointer(struct virtio_vq *vq, uint64_t addr,
 	if ((addr + size) < addr)
 		VIRTIO_DRI_ERRX(vq->vqdev,
 			"Driver provided an invalid address or size on a descriptor (0x%x)."
-			" Location: %s:%d", addr, __FILE__, line);
+			" Location: %s:%d", addr, file, line);
 
 	return (void *)addr;
 }
@@ -40,8 +40,9 @@ static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max,
 
 	next = desc[i].next;
 
-	// TODO: what does this wmb actually end up compiling as now that we're out of linux?
-	wmb(); // just because lguest put it here. not sure why they did that yet.
+	// TODO: Figure out why lguest had the memory barrier here.
+	//       DO NOT REMOVE UNLESS YOU KNOW WHY!
+	wmb_f();
 
 	if (next >= max) {
 		VIRTIO_DRI_ERRX(vq->vqdev,
@@ -64,9 +65,8 @@ void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
 	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].id = head;
 	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].len = len;
 
-	// TODO: Use this wmb() or wmb_f() need to look at Linux barrier defns
 	// virtio-v1.0-cs04 s2.4.8.2 The Virtqueue Used Ring
-	wmb(); // The device MUST set len prior to updating the used idx, hence wmb
+	wmb_f(); // The device MUST set len prior to updating the used idx (sfence)
 	vq->vring.used->idx++;
 }
 
@@ -91,9 +91,10 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 	if (eventfd_read(vq->eventfd, &event))
 		VIRTIO_DEV_ERRX(vq->vqdev,
 			"eventfd read failed while waiting for available descriptors\n");
-	// make sure vring.avail->idx has had a
-	// chance to update before we read it
-	mb();
+
+	// Make sure vring.avail->idx has had a chance to update before we read it
+	// The mfence instruction is invoked via mb_f in Akaros.
+	mb_f();
 
 	while (vq->last_avail == vq->vring.avail->idx) {
 
@@ -111,13 +112,14 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		if (eventfd_read(vq->eventfd, &event))
 			VIRTIO_DEV_ERRX(vq->vqdev,
 				"eventfd read failed while waiting for available descriptors\n");
-		// make sure vring.avail->idx has had a
-		// chance to update before we read it
-		mb();
+		// Make sure vring.avail->idx has had a chance to update before we read
+		// The mfence instruction is invoked via mb_f in Akaros.
+		mb_f();
 	}
 
 	// Read the desc num (head) after we detect the ring update (vq->last_avail != vq->vring.avail->idx)
-	rmb();
+	// The lfence instruction is invoked via rmb_f in Akaros.
+	rmb_f();
 
 	/* TODO: lguest also checks for this:
 	// Check it isn't doing very strange things with descriptor numbers.
@@ -195,8 +197,8 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 			//       refers to an indirect table. So we ignore it.
 
 			max = desc[i].len / sizeof(struct vring_desc);
-			desc = check_pointer(vq, desc[i].addr,
-			                     desc[i].len, __LINE__);
+			desc = virtio_check_pointer(vq, desc[i].addr, desc[i].len,
+			                            __FILE__, __LINE__);
 			i = 0; // TODO: put a comment on this or something so people don't think it's a spurrious i = 0
 
 			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
@@ -210,8 +212,9 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 
 		// Now build the scatterlist of buffers for the device to process
 		iov[*olen + *ilen].iov_len = desc[i].len;
-		iov[*olen + *ilen].iov_base = check_pointer(vq, desc[i].addr,
-		                                            desc[i].len, __LINE__);
+		iov[*olen + *ilen].iov_base = virtio_check_pointer(vq, desc[i].addr,
+		                                                   desc[i].len,
+		                                                   __FILE__, __LINE__);
 
 		if (desc[i].flags & VRING_DESC_F_WRITE) {
 			// input descriptor, increment *ilen
