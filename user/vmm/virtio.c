@@ -6,8 +6,6 @@
 #include <sys/uio.h>
 #include <vmm/virtio.h>
 
-// TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
-
 // based on _check_pointer in Linux's lguest.c
 void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
                            uint32_t size, char *file, uint32_t line)
