@@ -7,7 +7,7 @@
 #include <vmm/virtio.h>
 
 // TODO: Doc this
-// based on _virtio_check_pointer in lguest.c
+// based on _check_pointer in lguest.c
 void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
                            uint32_t size, char *file, uint32_t line)
 {
@@ -19,7 +19,7 @@ void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
 
 	if ((addr + size) < addr)
 		VIRTIO_DRI_ERRX(vq->vqdev,
-			"Driver provided an invalid address or size on a descriptor (0x%x)."
+			"Driver provided an invalid address or size (0x%x)."
 			" Location: %s:%d", addr, file, line);
 
 	return (void *)addr;
