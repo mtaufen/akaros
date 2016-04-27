@@ -45,7 +45,7 @@ static void virtio_mmio_reset_cfg(struct virtio_mmio_dev *mmio_dev)
 
 static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 {
-	// TODO: Audit the reset function!
+	// TODO: Audit the reset function! There may be other fields we should reset.
 	int i;
 
 	if (!mmio_dev->vqdev)
