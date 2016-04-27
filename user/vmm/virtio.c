@@ -132,9 +132,10 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 	head = vq->vring.avail->ring[vq->last_avail % vq->vring.num];
 	vq->last_avail++;
 
-	// TODO: make this an actual error
 	if (head >= vq->vring.num)
-		printf("dumb dumb dumb driver. head >= vq->vring.num in next_avail_vq_desc in vmrunkernel\n");
+		VIRTIO_DRI_ERRX(vq->vqdev,
+			"The index of the head of the descriptor chain provided by the"
+			" driver is after the end of the queue.");
 
 	// Don't know how many output buffers or input buffers there are yet, depends on desc chain.
 	*olen = *ilen = 0;
