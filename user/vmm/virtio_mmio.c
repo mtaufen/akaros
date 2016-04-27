@@ -124,8 +124,6 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 			"Attempt to read the device configuration space! Not yet implemented!");
 	}
 
-
-// TODO: the spec I am referencing is: http://docs.oasis-open.org/virtio/virtio/v1.0/cs04/virtio-v1.0-cs04.html
 	switch(offset) {
 		// Magic value
 		// 0x74726976 (a Little Endian equivalent of the “virt” string).
