@@ -10,11 +10,11 @@
 void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
                            uint32_t size, char *file, uint32_t line)
 {
-	// TODO: Right now, we just check that the pointer + the size doesn't wrap around.
-	//       we could probably also check that the pointer isn't outside the
-	//       region of memory allocated to the guest. However, we need to get
-	//       the bounds of that region from somewhere. I don't know what they are
-	//       off the top of my head.
+	// TODO: Right now, we just check that the pointer + the size doesn't wrap
+	//       around. We can also check that the pointer isn't outside
+	//       the region of memory allocated to the guest. However, we need to
+	//       get the bounds of that region from somewhere. I don't know what
+	//       they are off the top of my head.
 
 	if ((addr + size) < addr)
 		VIRTIO_DRI_ERRX(vq->vqdev,
@@ -136,7 +136,8 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 			"The index of the head of the descriptor chain provided by the"
 			" driver is after the end of the queue.");
 
-	// Don't know how many output buffers or input buffers there are yet, depends on desc chain.
+	// Don't know how many output buffers or input buffers there are yet,
+	// this depends on the descriptor chain.
 	*olen = *ilen = 0;
 
 	// Since vring.num is the size of the queue, max is the max descriptors
@@ -155,9 +156,10 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 	//             is used to index into desc.
 
 	do {
-		// If it's an indirect descriptor, we travel through the layer of indirection and then
-		// we're at table of descriptors chained by `next`, and since they are chained we can
-		// handle them the same way as direct descriptors once we're through that indirection.
+		// If it's an indirect descriptor, it points at a table of descriptors
+		// provided by the guest driver. The descriptors in that table are
+		// still chained, so we can ultimately handle them the same way as
+		// direct descriptors.
 		if (desc[i].flags & VRING_DESC_F_INDIRECT) {
 
 			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
