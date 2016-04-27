@@ -234,14 +234,14 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 // We call this when the driver writes 0x1 to QueueReady
 static void check_vring(struct virtio_vq *vq) {
 	// First make sure that the pointers on the vring are all valid:
-	virtio_check_pointer(vq, vq->vring.desc,
-	                     sizeof(*vq->vring.desc) * vq->vring.num
+	virtio_check_pointer(vq, (uint64_t)vq->vring.desc,
+	                     sizeof(*vq->vring.desc) * vq->vring.num,
 	                     __FILE__, __LINE__);
-	virtio_check_pointer(vq, vq->vring.avail,
-	                     sizeof(*vq->vring.avail) * vq->vring.num
+	virtio_check_pointer(vq, (uint64_t)vq->vring.avail,
+	                     sizeof(*vq->vring.avail) * vq->vring.num,
 	                     __FILE__, __LINE__);
-	virtio_check_pointer(vq, vq->vring.used,
-	                     sizeof(*vq->vring.used) * vq->vring.num
+	virtio_check_pointer(vq, (uint64_t)vq->vring.used,
+	                     sizeof(*vq->vring.used) * vq->vring.num,
 	                     __FILE__, __LINE__);
 
 
@@ -355,9 +355,10 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		//       or just wait for everything in flight to finish, before we finally write 0 here.
 		//       I wonder if I can put a signal handler on a thread for a signal that means
 		//       "stop/finish up your processing and then set your queue's qready to 0x0"?
-			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs)
-				check_vring(mmio_dev->vqdev->vqs[mmio_dev->qsel]);
+			if (mmio_dev->qsel < mmio_dev->vqdev->num_vqs) {
+				check_vring(&mmio_dev->vqdev->vqs[mmio_dev->qsel]);
 				mmio_dev->vqdev->vqs[mmio_dev->qsel].qready = *value;
+			}
 			break;
 
 		// Queue notifier
