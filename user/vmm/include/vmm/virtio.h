@@ -10,22 +10,22 @@
 
 // Print errors caused by incorrect driver behavior
 #define VIRTIO_DRI_ERRX(dev, fmt, ...) \
-	errx(1, "\n\tVirtio Device: %s:\n\t\tError, driver misbehaved. "\
+	errx(1, "\n  Virtio Device: %s: Error, driver misbehaved.\n  "\
 		fmt, (dev)->name, ## __VA_ARGS__)
 
 // Print warnings caused by incorrect driver behavior
 #define VIRTIO_DRI_WARNX(dev, fmt, ...) \
-	warnx("\n\tVirtio Device: %s:\n\t\tWarning, driver behaved suspiciously. "\
+	warnx("\n  Virtio Device: %s: Warning, driver behaved suspiciously.\n  "\
 		fmt, (dev)->name, ## __VA_ARGS__)
 
 // Print errors caused by incorrect device behavior
 #define VIRTIO_DEV_ERRX(dev, fmt, ...) \
-	errx(1, "\n\tVirtio Device: %s:\n\t\tError, device misbehaved. "\
+	errx(1, "\n  Virtio Device: %s: Error, device misbehaved.\n  "\
 		fmt, (dev)->name, ## __VA_ARGS__)
 
 // Print warnings caused by incorrect device behavior
 #define VIRTIO_DEV_WARNX(dev, fmt, ...) \
-	warnx("\n\tVirtio Device: %s:\n\t\tWarning, device behaved suspiciously. "\
+	warnx("\n  Virtio Device: %s: Warning, device behaved suspiciously.\n  "\
 		fmt, (dev)->name, ## __VA_ARGS__)
 
 
