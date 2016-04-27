@@ -124,6 +124,7 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 			"Attempt to read the device configuration space! Not yet implemented!");
 	}
 
+	// virtio-v1.0-cs04 Table 4.1
 	switch(offset) {
 		// Magic value
 		// 0x74726976 (a Little Endian equivalent of the “virt” string).
@@ -262,8 +263,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 	void *temp_ptr; // for facilitating bitwise ops on pointers
 
 	if (!mmio_dev->vqdev) {
-		// If there is no vqdev on the mmio_dev, we just make all registers write-ignored.
-		// TODO: Is there a case where we want to provide an mmio transport with no vqdev backend?
+		// If there is no vqdev on the mmio_dev,
+		// we just make all registers write-ignored.
 		return;
 	}
 
@@ -285,12 +286,7 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to write the device configuration space! Not yet implemented!");
 	}
 
-
-
-// TODO: note that some comments are direct from the virtio mmio spec, and some of my notes too.
-	// the spec I am referencing is: http://docs.oasis-open.org/virtio/virtio/v1.0/cs04/virtio-v1.0-cs04.html
-	// TODO: Mention Table 4.1 in the spec somewhere. And that the names of registers
-	//       used in the comments are taken from that table.
+	// virtio-v1.0-cs04 Table 4.1
 	switch(offset) {
 
 		// Device (host) features word selection.
