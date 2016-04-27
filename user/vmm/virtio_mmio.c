@@ -158,7 +158,7 @@ uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 				         " Current status is 0x%x", mmio_dev->status);
 
 			// virtio-v1.0-cs04 s6.2 Reserved Feature Bits
-			if (!(mmio_dev->vqdev->dev_feat & (1<<VIRTIO_F_VERSION_1)))
+			if (!(mmio_dev->vqdev->dev_feat & ((uint64_t)1<<VIRTIO_F_VERSION_1)))
 				VIRTIO_DEV_ERRX(mmio_dev->vqdev,
 					"The device must offer the VIRTIO_F_VERSION_1"
 					" feature bit (bit 32). You didn't."
