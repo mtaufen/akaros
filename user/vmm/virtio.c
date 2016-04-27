@@ -6,22 +6,23 @@
 #include <sys/uio.h>
 #include <vmm/virtio.h>
 
-// TODO: Rename this to something more succinct and understandable!
-// Based on the add_used function in lguest.c
-// Adds descriptor chain to the used ring of the vq
-void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
+// TODO: Doc this
+// based on _check_pointer in lguest.c
+static void *check_pointer(struct virtio_vq *vq, uint64_t addr,
+                           uint32_t size, uint32_t line)
 {
-	// NOTE: len is the total length of the descriptor chain (in bytes)
-	//       that was written to.
-	//       So you should pass 0 if you didn't write anything, and pass
-	//       the number of bytes you wrote otherwise.
-	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].id = head;
-	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].len = len;
+	// TODO: Right now, we just check that the pointer + the size doesn't wrap around.
+	//       we could probably also check that the pointer isn't outside the
+	//       region of memory allocated to the guest. However, we need to get
+	//       the bounds of that region from somewhere. I don't know what they are
+	//       off the top of my head.
 
-	// TODO: Use this wmb() or wmb_f() need to look at Linux barrier defns
-	// virtio-v1.0-cs04 s2.4.8.2 The Virtqueue Used Ring
-	wmb(); // The device MUST set len prior to updating the used idx, hence wmb
-	vq->vring.used->idx++;
+	if ((addr + size) < addr)
+		VIRTIO_DRI_ERRX(vq->vqdev,
+			"Driver provided an invalid address or size on a descriptor (0x%x)."
+			" Location: %s:%d", addr, __FILE__, line);
+
+	return (void *)addr;
 }
 
 // TODO: Cleanup. maybe rename too
@@ -50,6 +51,25 @@ static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max,
 
 	return next;
 }
+
+// TODO: Rename this to something more succinct and understandable!
+// Based on the add_used function in lguest.c
+// Adds descriptor chain to the used ring of the vq
+void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
+{
+	// NOTE: len is the total length of the descriptor chain (in bytes)
+	//       that was written to.
+	//       So you should pass 0 if you didn't write anything, and pass
+	//       the number of bytes you wrote otherwise.
+	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].id = head;
+	vq->vring.used->ring[vq->vring.used->idx % vq->vring.num].len = len;
+
+	// TODO: Use this wmb() or wmb_f() need to look at Linux barrier defns
+	// virtio-v1.0-cs04 s2.4.8.2 The Virtqueue Used Ring
+	wmb(); // The device MUST set len prior to updating the used idx, hence wmb
+	vq->vring.used->idx++;
+}
+
 
 // TODO: Rename this fn
 // TODO: Need to make sure we don't overflow iov. Right now we're just kind of
@@ -175,9 +195,9 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 			//       refers to an indirect table. So we ignore it.
 
 			max = desc[i].len / sizeof(struct vring_desc);
-			 // TODO: should check that addresses provided by the guest are neither invalid nor outside guest memory bounds
-			desc = (void *)desc[i].addr;
-			i = 0;
+			desc = check_pointer(vq, desc[i].addr,
+			                     desc[i].len, __LINE__);
+			i = 0; // TODO: put a comment on this or something so people don't think it's a spurrious i = 0
 
 			// virtio-v1.0-cs04 s2.4.5.3.1 Indirect Descriptors
 			if (max > vq->vring.num) {
@@ -188,11 +208,10 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 			}
 		}
 
-		// Now build the scatterlist of descriptors
-		// TODO: And, you know, we ought to check the pointers on these descriptors too!
+		// Now build the scatterlist of buffers for the device to process
 		iov[*olen + *ilen].iov_len = desc[i].len;
-		// TODO: should check that addresses provided by the guest are neither invalid nor outside guest memory bounds
-		iov[*olen + *ilen].iov_base = (void *)desc[i].addr;
+		iov[*olen + *ilen].iov_base = check_pointer(vq, desc[i].addr,
+		                                            desc[i].len, __LINE__);
 
 		if (desc[i].flags & VRING_DESC_F_WRITE) {
 			// input descriptor, increment *ilen
