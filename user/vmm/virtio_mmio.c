@@ -380,10 +380,14 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			}
 			// virtio-v1.0-cs04 s2.1.1. MUST reset before re-init if FAILED set
 			else if (mmio_dev->status & VIRTIO_CONFIG_S_FAILED
-				&&   mmio_dev->status != *value) { // allow them to set the same status value again, though
+				&&   mmio_dev->status != *value) {
+				// NOTE: This fails if the driver tries to *change* the status
+				//       after the FAILED bit is set. The driver can set the
+				//       same status again all it wants.
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 					"The driver must reset the device after setting the FAILED"
-					" status bit, before attempting to re-initialize the device.");
+					" status bit, before attempting to re-initialize "
+					" the device.");
 			}
 
 			// NOTE: If a bit is not set in value, then at this point it

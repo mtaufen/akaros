@@ -52,7 +52,9 @@ static uint32_t get_next_desc(struct vring_desc *desc, uint32_t i, uint32_t max,
 }
 
 // TODO: Rename this fn
-// TODO: Need to make sure we don't overflow iov
+// TODO: Need to make sure we don't overflow iov. Right now we're just kind of
+//       trusting that whoever provided the iov made it at least as big as
+//       qnum_max, but maybe we shouldn't be that trusting.
 // Based on wait_for_vq_desc in Linux lguest.c
 uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
                             uint32_t *olen, uint32_t *ilen)
@@ -188,8 +190,6 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 
 		// Now build the scatterlist of descriptors
 		// TODO: And, you know, we ought to check the pointers on these descriptors too!
-		// TODO: You better make sure you pass a big enough scatterlist to this function
-		//       for whatever the eventual value of *olen + *ilen will be!
 		iov[*olen + *ilen].iov_len = desc[i].len;
 		// TODO: should check that addresses provided by the guest are neither invalid nor outside guest memory bounds
 		iov[*olen + *ilen].iov_base = (void *)desc[i].addr;
