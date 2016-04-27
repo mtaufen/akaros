@@ -92,14 +92,14 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		VIRTIO_DEV_ERRX(vq->vqdev,
 			"eventfd read failed while waiting for available descriptors\n");
 
-	// Make sure vring.avail->idx has had a chance to update before we read it
+	// Make sure vring.avail->idx has had a chance to update before our read
 	// The mfence instruction is invoked via mb_f in Akaros.
 	mb_f();
 
 	while (vq->last_avail == vq->vring.avail->idx) {
 
 		// NOTE: I do not kick the guest with an irq here. I do that in
-		//       the individual service functions when it is necessary.
+		//       the queue service functions when it is necessary.
 
 		// NOTE: If you look at the comments in virtio_ring.h, the
 		//       VRING_DESC_F_NO_NOTIFY flag is set by the host to say to the
@@ -112,7 +112,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 		if (eventfd_read(vq->eventfd, &event))
 			VIRTIO_DEV_ERRX(vq->vqdev,
 				"eventfd read failed while waiting for available descriptors\n");
-		// Make sure vring.avail->idx has had a chance to update before we read
+		// Make sure vring.avail->idx has had a chance to update before our read
 		// The mfence instruction is invoked via mb_f in Akaros.
 		mb_f();
 	}
