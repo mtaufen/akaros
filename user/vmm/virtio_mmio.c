@@ -61,9 +61,12 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 	mmio_dev->status = 0;
 
 	// virtio-v1.0-cs04 s4.2.2.1 MMIO Device Register Layout
-	// Upon reset, the device MUST clear all bits in InterruptStatus and...
+	// Upon reset, the device MUST clear all bits in InterruptStatus
 	mmio_dev->isr = 0;
-	// ...ready bits in the QueueReady register for all queues in the device.
+
+	// virtio-v1.0-cs04 s4.2.2.1 MMIO Device Register Layout
+	// Upon reset, the device MUST clear...ready bits in the QueueReady
+	// register for all queues in the device.
 	for (i = 0; i < mmio_dev->vqdev->num_vqs; ++i) {
 		// TODO: Should probably kill the handler thread before doing
 		//       anything else. MUST NOT process buffers until reinit!
@@ -74,7 +77,6 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 	}
 
 	// TODO: The device MUST NOT consume buffers or notify the driver before DRIVER_OK
-	// TODO: Put parts of the virito spec relating to reset in here
 
 	virtio_mmio_reset_cfg(mmio_dev);
 
