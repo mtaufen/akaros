@@ -19,8 +19,8 @@ void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
 
 	if ((addr + size) < addr)
 		VIRTIO_DRI_ERRX(vq->vqdev,
-			"Driver provided an invalid address or size (0x%x)."
-			" Location: %s:%d", addr, file, line);
+			"Driver provided an invalid address or size (a:0x%x s:%u)."
+			" Location: %s:%d", addr, size, file, line);
 
 	return (void *)addr;
 }
