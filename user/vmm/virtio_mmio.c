@@ -82,9 +82,6 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 
 }
 
-// TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
-// TODO: MAKE SURE WE DO THIS FOR qready!!!!!
-
 uint32_t virtio_mmio_rd_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 {
 	uint64_t offset = gpa - mmio_dev->addr;

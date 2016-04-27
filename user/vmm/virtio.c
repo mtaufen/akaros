@@ -6,6 +6,8 @@
 #include <sys/uio.h>
 #include <vmm/virtio.h>
 
+// TODO: Prevent device from accessing virtual queue contents when QueueReady is 0x0
+
 // based on _check_pointer in Linux's lguest.c
 void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
                            uint32_t size, char *file, uint32_t line)
@@ -18,7 +20,7 @@ void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
 
 	if ((addr + size) < addr)
 		VIRTIO_DRI_ERRX(vq->vqdev,
-			"Driver provided an invalid address or size (a:0x%x s:%u)."
+			"Driver provided an invalid address or size (addr:0x%x sz:%u)."
 			" Location: %s:%d", addr, size, file, line);
 
 	return (void *)addr;
@@ -55,6 +57,10 @@ static uint32_t next_desc(struct vring_desc *desc, uint32_t i, uint32_t max,
 // based on add_used in Linux's lguest.c
 void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len)
 {
+	if (!vq->qready)
+		VIRTIO_DEV_ERRX(vq->vqdev,
+			"The device may not process queues with QueueReady set to 0x0.");
+
 	// NOTE: len is the total length of the descriptor chain (in bytes)
 	//       that was written to.
 	//       So you should pass 0 if you didn't write anything, and pass
@@ -91,7 +97,10 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 	// The mfence instruction is invoked via mb_f in Akaros.
 	mb_f();
 
-	while (vq->last_avail == vq->vring.avail->idx) {
+	// Since the device is not supposed to access queues when QueueReady is 0x0,
+	// if that's the case we'll stay in the loop.
+	while (vq->last_avail == vq->vring.avail->idx
+	       || vq->qready == 0) {
 		// We know the ring has updated when idx advances. We check == because
 		// idx is allowed to wrap around eventually.
 
