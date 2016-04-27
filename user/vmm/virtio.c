@@ -120,12 +120,21 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 	// The lfence instruction is invoked via rmb_f in Akaros.
 	rmb_f();
 
-	/* TODO: lguest also checks for this:
-	// Check it isn't doing very strange things with descriptor numbers.
-	if ((u16)(vq->vring.avail->idx - last_avail) > vq->vring.num)
-		bad_driver_vq(vq, "Guest moved used index from %u to %u",
-			      last_avail, vq->vring.avail->idx);
-	*/
+
+	// NOTE: lgeust is a bit cryptic about why they check for this. I added
+	//       the reason I believe they do it in the comment and error message.
+	// the guest can't have incremented idx more than vring.num times since
+	// we last incremented last_avail, because it would have run out of places
+	// to put descriptors after incrementing exactly vring.num times
+	// (prior to our next vq->last_avail++)
+	if ((vq->vring.avail->idx - last_avail) > vq->vring.num)
+		VIRTIO_DRI_ERRX(vq->vqdev,
+			"The driver advanced vq->vring.avail->idx from %u to %u,"
+			" which have a difference greater than the capacity of a queue."
+			" The idx is supposed to increase by 1 for each descriptor chain"
+			" added to the available ring; the driver should have run out of"
+			" room and thus been forced to wait for us to catch up!",
+			last_avail, vq->vring.avail);
 
 	// Mod because it's a *ring*
 	head = vq->vring.avail->ring[vq->last_avail % vq->vring.num];
