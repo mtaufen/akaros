@@ -483,7 +483,7 @@ static struct virtio_console_config cons_cfg;
 static struct virtio_vq_dev cons_vqdev = {
 	name: "console",
 	dev_id: VIRTIO_ID_CONSOLE,
-	dev_feat: (uint64_t)1 << VIRTIO_F_VERSION_1,
+	dev_feat: ((uint64_t)1 << VIRTIO_F_VERSION_1) | (1 << VIRTIO_CONSOLE_F_EMERG_WRITE),
 	num_vqs: 2,
 	cfg: &cons_cfg,
 	cfg_sz: sizeof(cons_cfg),

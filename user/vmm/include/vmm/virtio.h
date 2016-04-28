@@ -84,6 +84,7 @@ struct virtio_vq_dev {
 	void *cfg;
 
 	// The size, in bytes, of the device-specific config space
+	// Used by the device to bounds-check driver access
 	uint64_t cfg_sz;
 
 	// The virtio transport dev that contains this vqdev

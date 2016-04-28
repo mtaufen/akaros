@@ -169,8 +169,6 @@ struct virtio_mmio_dev {
 
 	// The generic vq device contained by this mmio transport
 	struct virtio_vq_dev *vqdev;
-
-	// TODO: What to do about the device-specific configuration space?
 };
 
 // Sets the VIRTIO_MMIO_INT_VRING bit in the interrupt status register for the device
