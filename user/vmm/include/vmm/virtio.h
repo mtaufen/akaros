@@ -77,11 +77,18 @@ struct virtio_vq_dev {
 	// The features supported by the driver (these are set by the guest)
 	uint64_t dri_feat;
 
-	// The virtio transport dev that contains this vqdev.
+	// The number of virtio_vqs on the device
+	uint32_t num_vqs;
+
+	// A pointer to the device-specific config space
+	void *cfg;
+
+	// The size, in bytes, of the device-specific config space
+	uint64_t cfg_sz;
+
+	// The virtio transport dev that contains this vqdev
 	// i.e. struct virtio_mmio_dev
 	void *transport_dev;
-
-	uint32_t num_vqs;
 
 	// Flexible array of vqs on this device
 	struct virtio_vq vqs[];
