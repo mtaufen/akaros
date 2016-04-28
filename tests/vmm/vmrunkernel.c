@@ -509,8 +509,6 @@ static struct virtio_vq_dev cons_vqdev = {
 		}
 };
 
-// TODO: still have to figure out what qnum_max is...
-
 // Recieve thread (not sure whether it's "vm is recving" or "vmm is recving" yet)
 static void * netrecv(void *arg)
 {
