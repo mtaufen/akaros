@@ -53,7 +53,7 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 
 	fprintf(stderr, "virtio mmio device reset: %s\n", mmio_dev->vqdev->name);
 
-	// TODO: Probably want to do this on a reset, double check
+	// Clear any driver-activated feature bits
 	mmio_dev->vqdev->dri_feat = 0;
 
 	// virtio-v1.0-cs04 s2.1.2 Device Status Field
@@ -70,8 +70,8 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 	for (i = 0; i < mmio_dev->vqdev->num_vqs; ++i) {
 		// TODO: Should probably kill the handler thread before doing
 		//       anything else. MUST NOT process buffers until reinit!
-		// TODO: If we kill, what does that mean for the eventfds?
-		// TODO: If we kill, where do we launch again in the future?
+		//       If we kill, what does that mean for the eventfds?
+		//       If we kill, where do we launch again in the future?
 		mmio_dev->vqdev->vqs[i].qready = 0;
 		mmio_dev->vqdev->vqs[i].last_avail = 0;
 	}
@@ -296,10 +296,19 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 
 		// Device feature flags activated by the driver
 		case VIRTIO_MMIO_DRIVER_FEATURES:
-			if (mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
+			// virtio-v1.0-cs04 s3.1.1 Device Initialization
+			if (mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK) {
+				// NOTE: The spec just says the driver isn't allowed to accept
+				//       NEW feature bits after setting FEATURES_OK. Although
+				//       the language makes it seem like it might be fine to
+				//       let the driver un-accept features after it sets
+				//       FEATURES_OK, this would require very careful handling,
+				//       so for now we just don't allow the driver to write to
+				//       the DriverFeatures register after FEATURES_OK is set.
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-					"The driver may not accept new feature bits offered by"
-					" the device after setting FEATURES_OK."); // TODO: But is it allowed to toggle already-accepted feature bits?
+					"The driver may not accept (i.e. activate) new feature bits"
+					" offered by the device after setting FEATURES_OK.");
+			}
 			else if (mmio_dev->dri_feat_sel) {
 				mmio_dev->vqdev->dri_feat &= 0xffffffff; // clear high 32 bits
 				mmio_dev->vqdev->dri_feat |= ((uint64_t)(*value) << 32); // write high 32 bits
@@ -397,8 +406,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 		// register notifies the device that events causing the interrupt have
 		// been handled.
 		case VIRTIO_MMIO_INTERRUPT_ACK:
-			// TODO: Is there anything the device actually has to DO on an interrupt ack
-			//       other than clear the acked interrupt bits in isr?
+			// TODO: Is there anything the device actually has to DO on an
+			//       ack other than clear the acked interrupt bits in isr?
 			if (*value & ~0b11)
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 					"Attempt to set undefined bits in InterruptACK register.");
