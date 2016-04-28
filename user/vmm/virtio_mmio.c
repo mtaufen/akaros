@@ -135,8 +135,8 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
 
 		if (!mmio_dev->vqdev->cfg || mmio_dev->vqdev->cfg_sz == 0) {
 			VIRTIO_DEV_ERRX(mmio_dev->vqdev,
-				"Driver attempted to read the device-specific config space,"
-				"  but the device failed to provide it.");
+				"Driver attempted to read the device-specific configuration"
+				" space, but the device failed to provide it.");
 		}
 
 		target = (uint8_t*)((uint64_t)mmio_dev->vqdev->cfg + offset);
@@ -340,8 +340,8 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 
 		if (!mmio_dev->vqdev->cfg || mmio_dev->vqdev->cfg_sz == 0) {
 			VIRTIO_DEV_ERRX(mmio_dev->vqdev,
-				"Driver attempted to write to the device-specific config space,"
-				"  but the device failed to provide it.");
+				"Driver attempted to write to the device-specific configuration"
+				" space, but the device failed to provide it.");
 		}
 
 		target = (uint8_t*)((uint64_t)mmio_dev->vqdev->cfg + offset);
