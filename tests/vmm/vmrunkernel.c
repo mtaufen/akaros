@@ -486,9 +486,10 @@ static struct virtio_vq_dev cons_vqdev = {
 	name: "console",
 	dev_id: VIRTIO_ID_CONSOLE,
 	dev_feat: ((uint64_t)1 << VIRTIO_F_VERSION_1)
-	                  | (1 << VIRTIO_CONSOLE_F_EMERG_WRITE)
-	                  | (1 << VIRTIO_CONSOLE_F_SIZE)
-	                  | (1 << VIRTIO_CONSOLE_F_MULTIPORT),
+	                  // | (1 << VIRTIO_CONSOLE_F_EMERG_WRITE)
+	                  // | (1 << VIRTIO_CONSOLE_F_SIZE)
+	                  // | (1 << VIRTIO_CONSOLE_F_MULTIPORT)
+	                  ,
 	num_vqs: 2,
 	cfg: &cons_cfg,
 	cfg_sz: sizeof(cons_cfg),
