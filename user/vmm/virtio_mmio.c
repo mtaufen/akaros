@@ -91,6 +91,7 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
                         uint64_t gpa, uint8_t size)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
+	uint8_t *target;
 
 	// virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization (MMIO section)
 	if (mmio_dev->vqdev->dev_id == 0
@@ -124,10 +125,41 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
 			" The driver should probably reset the device before continuing.");
 	}
 
+	// TODO: I could only do a limited amount of testing on the device-
+	//       specific config space, because I was limited to seeing what
+	//       the guest driver for the console device would do. You may
+	//       run into issues when you implement virtio-net, since that
+	//       does more with the device-specific config.
 	if (offset >= VIRTIO_MMIO_CONFIG) {
-		// TODO: Implement reading the device config space
-		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-			"Attempt to read the device configuration space! Not yet implemented!");
+		offset -= VIRTIO_MMIO_CONFIG;
+
+		if (!mmio_dev->vqdev->cfg || mmio_dev->vqdev->cfg_sz == 0) {
+			VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+				"Driver attempted to read the device-specific config space,"
+				"  but the device failed to provide it.");
+		}
+
+		target = (uint8_t*)((uint64_t)mmio_dev->vqdev->cfg + offset);
+
+		// TODO: Check that size matches the size of the field at offset
+		//       for the given device? i.e. virtio_console_config.rows
+		//       should only be accessible via a 16 bit read or write.
+		//       I haven't done this yet, it will be a significant
+		//       undertaking and maintainence commitment, because you
+		//       will have to do it for every virtio device you
+		//       want to use in the future.
+		switch(size) {
+			case 1:
+				return *((uint8_t*)target);
+			case 2:
+				return *((uint16_t*)target);
+			case 4:
+				return *((uint32_t*)target);
+			default:
+				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+					"The driver must use 8, 16, or 32 bit wide reads for"
+					" reading the device-specific configuration space.");
+		}
 	}
 
 	// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
