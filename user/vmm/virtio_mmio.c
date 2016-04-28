@@ -88,7 +88,7 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 }
 
 uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
-                        uint64_t gpa, uint16_t size)
+                        uint64_t gpa, uint8_t size)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
 
@@ -271,7 +271,7 @@ static void check_vring(struct virtio_vq *vq) {
 }
 
 void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
-                    uint16_t size, uint32_t *value)
+                    uint8_t size, uint32_t *value)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
 	struct virtio_vq *notified_queue;

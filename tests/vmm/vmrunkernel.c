@@ -1031,6 +1031,7 @@ int main(int argc, char **argv)
 						"Driver tried to access the device with a negative"
 						" access width in the instruction?");
 				}
+				fprintf(stderr, "RIP is 0x%x\n", vm_tf->tf_rip);
 				if (store) {
 					virtio_mmio_wr(&cons_mmio_dev, gpa, size, (uint32_t *)regp);
 				}
