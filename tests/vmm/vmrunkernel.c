@@ -369,7 +369,15 @@ void *timer_thread(void *arg)
 
 // FIXME. probably remove consdata TODO
 volatile int consdata = 0;
-static struct virtio_mmio_dev cons_mmio_dev;
+
+static void virtio_poke_guest(void) {
+	set_posted_interrupt(0xE5);
+	ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
+}
+
+static struct virtio_mmio_dev cons_mmio_dev = {
+	poke_guest: virtio_poke_guest
+};
 
 static void *cons_receiveq_fn(void *_vq) // host -> guest
 {
@@ -406,12 +414,8 @@ static void *cons_receiveq_fn(void *_vq) // host -> guest
 
 		// set the low bit of the interrupt status register and trigger an interrupt
 		virtio_mmio_set_vring_irq(vq->vqdev->transport_dev); // just assuming that the mmio transport was used for now
-		// I think this is how we send the guest an interrupt. Definitely the way we have to do it
-		// concurrently. Not sure if doing this during an exit will mess things up...
-		// also not sure if 0xE5 is the right one to send... TODO
-		set_posted_interrupt(0xE5);
-		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
-
+		if (((struct virtio_mmio_dev*)vq->vqdev->transport_dev)->poke_guest)
+			((struct virtio_mmio_dev*)vq->vqdev->transport_dev)->poke_guest();
 	}
 	return NULL;
 }
@@ -452,11 +456,8 @@ static void *cons_transmitq_fn(void *_vq) // guest -> host
 
 		// 4. set the low bit of the interrupt status register and trigger an interrupt
 		virtio_mmio_set_vring_irq(vq->vqdev->transport_dev); // just assuming that the mmio transport was used for now
-		// I think this is how we send the guest an interrupt. Definitely the way we have to do it
-		// concurrently. Not sure if doing this during an exit will mess things up...
-		// also not sure if 0xE5 is the right one to send... TODO
-		set_posted_interrupt(0xE5);
-		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
+		if (((struct virtio_mmio_dev*)vq->vqdev->transport_dev)->poke_guest)
+			((struct virtio_mmio_dev*)vq->vqdev->transport_dev)->poke_guest();
 	}
 	return NULL;
 }

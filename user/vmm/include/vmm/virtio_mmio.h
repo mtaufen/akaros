@@ -161,6 +161,10 @@ struct virtio_mmio_dev {
 	// Interrupt status register
 	uint32_t isr;
 
+	// This utility function will be called when the device needs to interrupt the guest
+	// You can have it do whatever you want.
+	void (*poke_guest)(void);
+
 	// Status flags for the device
 	uint8_t status;
 
