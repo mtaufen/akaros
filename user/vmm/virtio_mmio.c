@@ -384,7 +384,11 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 				// kick the queue's service thread
 				if (notified_queue->eventfd > 0)
 					eventfd_write(notified_queue->eventfd, 1);
-				// TODO: Should we panic if there's no valid eventfd?
+				else
+					VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+						"You need to provide a valid eventfd on your virtio_vq"
+						" so that it can be kicked when the driver writes to"
+						" QueueNotify.");
 			}
 			break;
 
