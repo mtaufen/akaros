@@ -28,6 +28,8 @@
 #include <vmm/virtio_ids.h>
 #include <vmm/virtio_config.h>
 
+#include <vmm/virtio_console.h>
+
 #include <vmm/sched.h>
 
 #include <sys/eventfd.h>
@@ -476,11 +478,15 @@ The driver MUST NOT put a device-writable buffer in a transmitq.
 
 */
 
+static struct virtio_console_config cons_cfg;
+
 static struct virtio_vq_dev cons_vqdev = {
 	name: "console",
 	dev_id: VIRTIO_ID_CONSOLE,
 	dev_feat: (uint64_t)1 << VIRTIO_F_VERSION_1,
 	num_vqs: 2,
+	cfg: &cons_cfg,
+	cfg_sz: sizeof(cons_cfg),
 	transport_dev: &cons_mmio_dev,
 	vqs: {
 			{
