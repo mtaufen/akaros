@@ -91,7 +91,7 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
                         uint64_t gpa, uint8_t size)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
-	uint8_t *target;
+	uint8_t *target; // target of read from device-specific config space
 
 	// virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization (MMIO section)
 	if (mmio_dev->vqdev->dev_id == 0
@@ -307,6 +307,7 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 {
 	uint64_t offset = gpa - mmio_dev->addr;
 	struct virtio_vq *notified_queue;
+	uint8_t *target; // target of write to device-specific config space
 	void *temp_ptr; // for facilitating bitwise ops on pointers
 
 	if (!mmio_dev->vqdev) {
