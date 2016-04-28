@@ -42,6 +42,11 @@ void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev)
 	mmio_dev->isr |= VIRTIO_MMIO_INT_VRING;
 }
 
+void virtio_mmio_set_cfg_irq(struct virtio_mmio_dev *mmio_dev)
+{
+	mmio_dev->isr |= VIRTIO_MMIO_INT_CONFIG;
+}
+
 static void virtio_mmio_reset_cfg(struct virtio_mmio_dev *mmio_dev)
 {
 	// TODO: Reset the device-specific configuration space.
@@ -366,6 +371,10 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 					"The driver must use 8, 16, or 32 bit wide writes for"
 					" writing to the device-specific configuration space.");
 		}
+
+		// Notify the driver that the
+
+		// TODO: ... we'll have to send an interrupt as well....
 		return;
 	}
 

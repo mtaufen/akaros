@@ -174,6 +174,9 @@ struct virtio_mmio_dev {
 // Sets the VIRTIO_MMIO_INT_VRING bit in the interrupt status register for the device
 void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev);
 
+// Sets the VIRTIO_MMIO_INT_CONFIG bit in the interrupt status register for the device
+void virtio_mmio_set_cfg_irq(struct virtio_mmio_dev *mmio_dev);
+
 // virtio_mmio_rd_reg and virtio_mmio_wr_reg are used to process the guest's driver's
 // reads and writes to the mmio device registers. gpa is the guest physical address
 // that the driver tried to write to; this is used to calculate the target register
