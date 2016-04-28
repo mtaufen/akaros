@@ -1021,17 +1021,13 @@ int main(int argc, char **argv)
 			if (debug) fprintf(stderr, "%p %p %p %p %p %p\n", gpa, regx, regp, store, size, advance);
 
 			if ((gpa & ~0xfffULL) == virtiobase) {
-				// printf("DO SOME VIRTIO\n");
 				// Lucky for us the various virtio ops are well-defined.
-				//virtio_mmio((struct guest_thread *)vm_thread, gpa, regx, regp, store);
 				if (store) {
-					virtio_mmio_wr(&cons_mmio_dev, gpa, (uint32_t *)regp);
+					virtio_mmio_wr(&cons_mmio_dev, gpa, (uint32_t *)regp, size);
 				}
 				else {
-					*regp = virtio_mmio_rd(&cons_mmio_dev, gpa);
+					*regp = virtio_mmio_rd(&cons_mmio_dev, gpa, size);
 				}
-				// printf("after virtio read or wr in vmrunkernel \n");
-
 
 				if (debug) fprintf(stderr, "store is %d:\n", store);
 				if (debug) fprintf(stderr, "REGP IS %16x:\n", *regp);

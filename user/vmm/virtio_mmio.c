@@ -87,7 +87,8 @@ static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
 
 }
 
-uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
+uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
+                        uint64_t gpa, int size)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
 
@@ -127,6 +128,13 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev, uint64_t gpa)
 		// TODO: Implement reading the device config space
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 			"Attempt to read the device configuration space! Not yet implemented!");
+	}
+
+	// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
+	if (size != 32 || !(offset % 32)) {
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+			"The driver must only use 32 bit wide and aligned writes for"
+			" writing the control registers on the MMIO transport.");
 	}
 
 	// virtio-v1.0-cs04 Table 4.1
@@ -261,7 +269,8 @@ static void check_vring(struct virtio_vq *vq) {
 			" to 0 when allocating the used ring.");
 }
 
-void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *value)
+void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
+                    uint32_t *value, int size)
 {
 	uint64_t offset = gpa - mmio_dev->addr;
 	struct virtio_vq *notified_queue;
@@ -289,6 +298,13 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *va
 	if (offset >= VIRTIO_MMIO_CONFIG) {
 		// TODO: Implement writing the device config space
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to write the device configuration space! Not yet implemented!");
+	}
+
+	// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
+	if (size != 32 || !(offset % 32)) {
+		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+			"The driver must only use 32 bit wide and aligned reads for"
+			" reading the control registers on the MMIO transport.");
 	}
 
 	// virtio-v1.0-cs04 Table 4.1
