@@ -331,11 +331,15 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 					" offered by the device after setting FEATURES_OK.");
 			}
 			else if (mmio_dev->dri_feat_sel) {
-				mmio_dev->vqdev->dri_feat &= 0xffffffff; // clear high 32 bits
-				mmio_dev->vqdev->dri_feat |= ((uint64_t)(*value) << 32); // write high 32 bits
+				// clear high 32 bits
+				mmio_dev->vqdev->dri_feat &= 0xffffffff;
+				// write high 32 bits
+				mmio_dev->vqdev->dri_feat |= ((uint64_t)(*value) << 32);
 			} else {
-				mmio_dev->vqdev->dri_feat &= ((uint64_t)0xffffffff << 32); // clear low 32 bits
-				mmio_dev->vqdev->dri_feat |= *value; // write low 32 bits
+				// clear low 32 bits
+				mmio_dev->vqdev->dri_feat &= ((uint64_t)0xffffffff << 32);
+				// write low 32 bits
+				mmio_dev->vqdev->dri_feat |= *value;
 			}
 			break;
 
