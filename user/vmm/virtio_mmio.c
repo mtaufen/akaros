@@ -37,6 +37,11 @@
 
 #define VIRT_MMIO_VENDOR 0x52414B41 /* 'AKAR' */
 
+void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev)
+{
+	mmio_dev->isr |= VIRTIO_MMIO_INT_VRING;
+}
+
 static void virtio_mmio_reset_cfg(struct virtio_mmio_dev *mmio_dev)
 {
 	// TODO: Reset the device-specific configuration space.
@@ -729,8 +734,5 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t *va
 }
 
 
-void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev)
-{
-	mmio_dev->isr |= VIRTIO_MMIO_INT_VRING;
-}
+
 
