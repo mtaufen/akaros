@@ -1027,7 +1027,7 @@ int main(int argc, char **argv)
 					// TODO: I don't know if it's even possible for the width to be
 					//       negative; one would imagine that this would be prevented
 					//       at a hardware level...
-					VIRTIO_DRI_ERRX(&cons_mmio_dev->vqdev,
+					VIRTIO_DRI_ERRX(cons_mmio_dev.vqdev,
 						"Driver tried to access the device with a negative"
 						" access width in the instruction?");
 				}
