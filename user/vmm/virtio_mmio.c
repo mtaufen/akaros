@@ -512,9 +512,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 						"Attempt to access QueueDescLow on queue %d,"
 						" which has nonzero QueueReady.", mmio_dev->qsel);
 
-				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
-				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
-				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
+				// clear low bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
+				  & ((uint64_t)0xffffffff << 32));
+				// write low bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr | *value);
 
 				// virtio-v1.0-cs04 s2.4 Virtqueues
 				if ((uint64_t)temp_ptr % 16)
@@ -527,7 +530,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			}
 			else {
 				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
-					"Attempt to write QueueDescLow register for invalid QueueSel."
+					"Attempt to write QueueDescLow register for invalid"
+					" QueueSel."
 					" QueueSel was %u, but the number of queues is %u.",
 					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
@@ -541,10 +545,13 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 						"Attempt to access QueueDescHigh on queue %d,"
 						" which has nonzero QueueReady.", mmio_dev->qsel);
 
-				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
-				                  & ((uint64_t)0xffffffff)); // clear high bits
+				// clear high bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.desc
+				  & ((uint64_t)0xffffffff));
+				// write high bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr
-				                  | ((uint64_t)(*value) << 32)); // write high bits
+				                  | ((uint64_t)(*value) << 32));
 
 				// virtio-v1.0-cs04 s2.4 Virtqueues
 				if ((uint64_t)temp_ptr % 16)
@@ -557,7 +564,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			}
 			else {
 				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
-					"Attempt to write QueueDescHigh register for invalid QueueSel."
+					"Attempt to write QueueDescHigh register for invalid"
+					" QueueSel."
 					" QueueSel was %u, but the number of queues is %u.",
 					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
@@ -571,9 +579,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 						"Attempt to access QueueAvailLow on queue %d,"
 						" which has nonzero QueueReady.", mmio_dev->qsel);
 
-				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
-				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
-				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
+				// clear low bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
+				  & ((uint64_t)0xffffffff << 32));
+				// write low bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr | *value);
 
 				// virtio-v1.0-cs04 s2.4 Virtqueues
 				if ((uint64_t)temp_ptr % 2)
@@ -586,7 +597,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			}
 			else {
 				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
-					"Attempt to write QueueAvailLow register for invalid QueueSel."
+					"Attempt to write QueueAvailLow register for invalid"
+					" QueueSel."
 					" QueueSel was %u, but the number of queues is %u.",
 					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
@@ -600,10 +612,13 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 						"Attempt to access QueueAvailHigh on queue %d,"
 						" which has nonzero QueueReady.", mmio_dev->qsel);
 
-				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
-				                  & ((uint64_t)0xffffffff)); // clear high bits
+				// clear high bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.avail
+				 &  ((uint64_t)0xffffffff));
+				// write high bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr
-				                  | ((uint64_t)(*value) << 32)); // write high bits
+				                  | ((uint64_t)(*value) << 32));
 
 				// virtio-v1.0-cs04 s2.4 Virtqueues
 				if ((uint64_t)temp_ptr % 2)
@@ -616,7 +631,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			}
 			else {
 				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
-					"Attempt to write QueueAvailHigh register for invalid QueueSel."
+					"Attempt to write QueueAvailHigh register for invalid"
+					" QueueSel."
 					" QueueSel was %u, but the number of queues is %u.",
 					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
@@ -630,9 +646,12 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 						"Attempt to access QueueUsedLow on queue %d,"
 						" which has nonzero QueueReady.", mmio_dev->qsel);
 
-				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
-				                  & ((uint64_t)0xffffffff << 32)); // clear low bits
-				temp_ptr = (void *) ((uint64_t)temp_ptr | *value); // write low bits
+				// clear low bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
+				  & ((uint64_t)0xffffffff << 32));
+				// write low bits
+				temp_ptr = (void *) ((uint64_t)temp_ptr | *value);
 
 				// virtio-v1.0-cs04 s2.4 Virtqueues
 				if ((uint64_t)temp_ptr % 4)
@@ -645,7 +664,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			}
 			else {
 				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
-					"Attempt to write QueueUsedLow register for invalid QueueSel."
+					"Attempt to write QueueUsedLow register for invalid"
+					" QueueSel."
 					" QueueSel was %u, but the number of queues is %u.",
 					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
@@ -659,10 +679,13 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 						"Attempt to access QueueUsedHigh on queue %d,"
 						" which has nonzero QueueReady.", mmio_dev->qsel);
 
-				temp_ptr = (void *) ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
-				                  & ((uint64_t)0xffffffff)); // clear high bits
+				// clear high bits
+				temp_ptr = (void *)
+				    ((uint64_t)mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.used
+				  & ((uint64_t)0xffffffff));
+				// write high bits
 				temp_ptr = (void *) ((uint64_t)temp_ptr
-				                  | ((uint64_t)(*value) << 32)); // write high bits
+				                  | ((uint64_t)(*value) << 32));
 
 				// virtio-v1.0-cs04 s2.4 Virtqueues
 				if ((uint64_t)temp_ptr % 4)
@@ -675,7 +698,8 @@ void virtio_mmio_wr_reg(struct virtio_mmio_dev *mmio_dev, uint64_t gpa, uint32_t
 			}
 			else {
 				VIRTIO_DRI_WARNX(mmio_dev->vqdev,
-					"Attempt to write QueueUsedHigh register for invalid QueueSel."
+					"Attempt to write QueueUsedHigh register for invalid"
+					" QueueSel."
 					" QueueSel was %u, but the number of queues is %u.",
 					mmio_dev->qsel, mmio_dev->vqdev->num_vqs);
 			}
