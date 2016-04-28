@@ -49,8 +49,20 @@ void virtio_mmio_set_cfg_irq(struct virtio_mmio_dev *mmio_dev)
 
 static void virtio_mmio_reset_cfg(struct virtio_mmio_dev *mmio_dev)
 {
-	// TODO: Reset the device-specific configuration space.
-	VIRTIO_DRI_WARNX(mmio_dev->vqdev, "Attempt to reset device configuration space, not yet implemented!");
+	if (!mmio_dev->vqdev->cfg || mmio_dev->vqdev->cfg_sz == 0)
+		VIRTIO_DEV_WARNX(mmio_dev->vqdev,
+			"Attempt to reset the device-specific configuration space,"
+			" but the device does not provide it. Generally, this region"
+			" is required, so you should probably do something about that.");
+
+	// If a default device-specific configuration is provided, copy that
+	// into the device-specific configuration space. Otherwise, clear the
+	// device-specific configuration space.
+	if (mmio_dev->vqdev->cfg_d)
+		memcpy(mmio_dev->vqdev->cfg, mmio_dev->vqdev->cfg_d,
+			   mmio_dev->vqdev->cfg_sz);
+	else
+		memset(mmio_dev->vqdev->cfg, 0x0, mmio_dev->vqdev->cfg_sz);
 }
 
 static void virtio_mmio_reset(struct virtio_mmio_dev *mmio_dev)
