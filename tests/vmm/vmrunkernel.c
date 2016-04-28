@@ -1021,9 +1021,18 @@ int main(int argc, char **argv)
 			if (debug) fprintf(stderr, "%p %p %p %p %p %p\n", gpa, regx, regp, store, size, advance);
 
 			if ((gpa & ~0xfffULL) == virtiobase) {
-				// Lucky for us the various virtio ops are well-defined.
+				if (size < 0) {
+					// TODO: It would be preferable for the decoder to return an
+					//       unsigned value, so that we don't have to worry about this.
+					// TODO: I don't know if it's even possible for the width to be
+					//       negative; one would imagine that this would be prevented
+					//       at a hardware level...
+					VIRTIO_DRI_ERRX(&cons_mmio_dev->vqdev,
+						"Driver tried to access the device with a negative"
+						" access width in the instruction?");
+				}
 				if (store) {
-					virtio_mmio_wr(&cons_mmio_dev, gpa, (uint32_t *)regp, size);
+					virtio_mmio_wr(&cons_mmio_dev, gpa, size, (uint32_t *)regp);
 				}
 				else {
 					*regp = virtio_mmio_rd(&cons_mmio_dev, gpa, size);
