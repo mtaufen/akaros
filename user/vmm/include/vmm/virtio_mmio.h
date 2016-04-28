@@ -179,7 +179,8 @@ void virtio_mmio_set_vring_irq(struct virtio_mmio_dev *mmio_dev);
 // virtio_mmio_rd_reg and virtio_mmio_wr_reg are used to process the guest's driver's
 // reads and writes to the mmio device registers. gpa is the guest physical address
 // that the driver tried to write to; this is used to calculate the target register
+// size should be the size of the access in bytes
 uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
-                        uint64_t gpa, uint16_t size);
+                        uint64_t gpa, uint8_t size);
 void     virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev,
-                        uint64_t gpa, uint16_t size, uint32_t *value);
+                        uint64_t gpa, uint8_t size, uint32_t *value);
