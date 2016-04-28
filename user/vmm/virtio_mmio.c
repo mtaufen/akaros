@@ -328,6 +328,11 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 			" The driver should probably reset the device before continuing.");
 	}
 
+	// TODO: I could only do a limited amount of testing on the device-
+	//       specific config space, because I was limited to seeing what
+	//       the guest driver for the console device would do. You may
+	//       run into issues when you implement virtio-net, since that
+	//       does more with the device-specific config.
 	if (offset >= VIRTIO_MMIO_CONFIG) {
 		// TODO: Implement writing the device config space
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev, "Attempt to write the device configuration space! Not yet implemented!");
