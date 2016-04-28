@@ -144,6 +144,13 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
 				" space, but the device failed to provide it.");
 		}
 
+		// virtio-v1.0-cs04 s3.1.1 Device Initialization
+		if (!(mmio_dev->status & VIRTIO_CONFIG_S_DRIVER)) {
+			VIRTIO_DRI_ERRX(mmio_dev-vqdev,
+				"Driver attempted to read the device-specific configuration"
+				" space before setting the DRIVER status bit.");
+		}
+
 		target = (uint8_t*)((uint64_t)mmio_dev->vqdev->cfg + offset);
 
 		// TODO: Check that size matches the size of the field at offset
@@ -361,6 +368,13 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 				" space, but the device failed to provide it.");
 		}
 
+		// virtio-v1.0-cs04 s3.1.1 Device Initialization
+		if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)) {
+			VIRTIO_DRI_ERRX(mmio_dev-vqdev,
+				"Driver attempted to write the device-specific configuration"
+				" space before setting the FEATURES_OK status bit.");
+		}
+
 		target = (uint8_t*)((uint64_t)mmio_dev->vqdev->cfg + offset);
 
 		// TODO: Check that size matches the size of the field at offset
@@ -399,7 +413,7 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 
 		// Notify the driver that the device-specific config changed
 		virtio_mmio_set_cfg_irq(mmio_dev);
-// TODO: ... we'll have to send an interrupt as well....
+// TODO: ... we'll have to send an interrupt as well.... derp
 		return;
 	}
 
@@ -459,7 +473,7 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 		case VIRTIO_MMIO_QUEUE_SEL:
 		// NOTE: We must allow the driver to write whatever they want to
 		//       QueueSel, because QueueNumMax contians 0x0 for invalid
-		//       QueueSel incices.
+		//       QueueSel indices.
 			mmio_dev->qsel = *value;
 			break;
 
