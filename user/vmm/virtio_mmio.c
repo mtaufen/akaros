@@ -151,6 +151,14 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
 				" space before setting the DRIVER status bit.");
 		}
 
+		if ((offset + size) > mmio_dev->vqdev->cfg_sz
+			|| (offset + size) < offset) {
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to read invalid offset of the device specific"
+				" configuration space, or (offset + read width)"
+				" wrapped around.");
+		}
+
 		target = (uint8_t*)((uint64_t)mmio_dev->vqdev->cfg + offset);
 
 		// TODO: Check that size matches the size of the field at offset
@@ -373,6 +381,14 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 				"Driver attempted to write the device-specific configuration"
 				" space before setting the FEATURES_OK status bit.");
+		}
+
+		if ((offset + size) > mmio_dev->vqdev->cfg_sz
+			|| (offset + size) < offset) {
+			VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+				"Attempt to write invalid offset of the device specific"
+				" configuration space, or (offset + write width)"
+				" wrapped around.");
 		}
 
 		target = (uint8_t*)((uint64_t)mmio_dev->vqdev->cfg + offset);

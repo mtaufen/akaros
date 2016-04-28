@@ -83,6 +83,11 @@ struct virtio_vq_dev {
 	// A pointer to the device-specific config space
 	void *cfg;
 
+	// A pointer to a default device-specific config space
+	// If set, cfg_sz bytes, starting at cfg_d, will be
+	// copied to cfg.
+	void *cfg_d;
+
 	// The size, in bytes, of the device-specific config space
 	// Used by the device to bounds-check driver access
 	uint64_t cfg_sz;

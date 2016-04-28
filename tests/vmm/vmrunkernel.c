@@ -462,26 +462,8 @@ static void *cons_transmitq_fn(void *_vq) // guest -> host
 	return NULL;
 }
 
-
-
-/*
-5.3.6 Device Operation
-
-1. For output, a buffer containing the characters is placed in the port’s transmitq.
-2. When a buffer is used in the receiveq (signalled by an interrupt), the contents is the input
-   to the port associated with the virtqueue for which the notification was received.
-...
-
-5.3.6.1 Driver Requirements: Device Operation
-
-The driver MUST NOT put a device-readable in a receiveq.
-The driver MUST NOT put a device-writable buffer in a transmitq.
-
-*/
-
-static struct virtio_console_config cons_cfg = {
-	max_nr_ports: 1
-};
+static struct virtio_console_config cons_cfg;
+static struct virtio_console_config cons_cfg_d;
 
 static struct virtio_vq_dev cons_vqdev = {
 	name: "console",
@@ -493,7 +475,8 @@ static struct virtio_vq_dev cons_vqdev = {
 	                  ,
 	num_vqs: 2,
 	cfg: &cons_cfg,
-	cfg_sz: sizeof(cons_cfg),
+	cfg_d: &cons_cfg_d,
+	cfg_sz: sizeof(struct virtio_console_config),
 	transport_dev: &cons_mmio_dev,
 	vqs: {
 			{
