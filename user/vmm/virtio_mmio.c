@@ -157,13 +157,24 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
 			case 1:
 				return *((uint8_t*)target);
 			case 2:
+				if ((uint64_t)target % 2 != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver must use 16 bit aligned reads for"
+						" reading from 16 bit values in the device-specific"
+						" configuration space.");
 				return *((uint16_t*)target);
 			case 4:
+				if ((uint64_t)target % 4 != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver must use 32 bit aligned reads for"
+						" reading from 32 or 64 bit values in the"
+						" device-specific configuration space.");
 				return *((uint32_t*)target);
 			default:
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-					"The driver must use 8, 16, or 32 bit wide reads for"
-					" reading the device-specific configuration space.");
+					"The driver must use 8, 16, or 32 bit wide and aligned"
+					" reads for reading from the device-specific"
+					" configuration space.");
 		}
 	}
 
@@ -363,18 +374,32 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 			case 1:
 				*((uint8_t*)target) = *((uint8_t*)value);
 			case 2:
+				if ((uint64_t)target % 2 != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver must use 16 bit aligned writes for"
+						" writing to 16 bit values in the device-specific"
+						" configuration space.");
 				*((uint16_t*)target) = *((uint16_t*)value);
 			case 4:
+				if ((uint64_t)target % 4 != 0)
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver must use 32 bit aligned writes for"
+						" writing to 32 or 64 bit values in the device-specific"
+						" configuration space.");
 				*((uint32_t*)target) = *((uint32_t*)value);
 			default:
 				VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-					"The driver must use 8, 16, or 32 bit wide writes for"
-					" writing to the device-specific configuration space.");
+					"The driver must use 8, 16, or 32 bit wide and aligned"
+					" writes for writing to the device-specific"
+					" configuration space.");
 		}
 
-		// Notify the driver that the
+		// Increment cfg_gen because the device-specific config changed
+		mmio_dev->cfg_gen++;
 
-		// TODO: ... we'll have to send an interrupt as well....
+		// Notify the driver that the device-specific config changed
+		virtio_mmio_set_cfg_irq(mmio_dev);
+// TODO: ... we'll have to send an interrupt as well....
 		return;
 	}
 
