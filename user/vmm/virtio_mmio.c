@@ -133,7 +133,7 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
 	// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
 	if (size != 4 || (offset % 4) != 0) {
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
-			"w:%u ofst:%u ofst%32:%u \nThe driver must only use 32 bit wide and aligned reads for"
+			"The driver must only use 32 bit wide and aligned reads for"
 			" reading the control registers on the MMIO transport.",
 			size, offset, offset%32);
 	}
@@ -302,7 +302,7 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 	}
 
 	// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
-	if (size != 4 || !(offset % 4)) {
+	if (size != 4 || (offset % 4) != 0) {
 		VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 			"The driver must only use 32 bit wide and aligned writes for"
 			" writing the control registers on the MMIO transport.");
