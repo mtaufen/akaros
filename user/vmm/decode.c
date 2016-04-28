@@ -79,7 +79,17 @@ static int target(void *insn, int *store)
 		break;
 	case 0x89:
 	case 0x8b:
-		s = 2;
+		// TODO: To really know, for sure, that this is 32 bit, we'd have to check
+		//       the segment descriptor for the guest's current code segment in it's
+		//       GDT. The D flag (bit 22) determines whether the instruction is using
+		//       32 or 16-bit operand size. I'm just going to assume the flag is set
+		//       (meaning 32 bit operands) for now, in order to make virtio work.
+		//       But really we should check if we want to know for sure. Note that
+		//       this hack (changing the below line) only applies to mov instructions.
+		//
+		//       And I think there's also a prefix you can use to switch the instruction
+		//       to 16-bit addressing.... (address-size override prefix?)
+		s = 4;
 		break;
 	case 0x81:
 		s = 4;	
