@@ -132,7 +132,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 
 	// NOTE: lgeust is a bit cryptic about why they check for this. I added
 	//       the reason I believe they do it in the comment and error message.
-	// the guest can't have incremented idx more than vring.num times since
+	// The guest can't have incremented idx more than vring.num times since
 	// we last incremented vq->last_avail, because it would have run out of
 	// places to put descriptors after incrementing exactly vring.num times
 	// (prior to our next vq->last_avail++)
