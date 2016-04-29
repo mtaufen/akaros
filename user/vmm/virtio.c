@@ -6,6 +6,7 @@
 #include <sys/uio.h>
 #include <vmm/virtio.h>
 #include <vmm/virtio_ids.h>
+#include <vmm/virtio_config.h>
 
 // based on _check_pointer in Linux's lguest.c
 void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
@@ -300,8 +301,8 @@ const char *virtio_validate_feat(struct virtio_vq_dev *vqdev, uint64_t feat) {
 	}
 
 	// Validate common features
-	if (!(feat & VIRTIO_F_VERSION_1))
-		return "The VIRTIO_F_VERSION_1 feature bit must be present!"
+	if (!(feat & (1<<VIRTIO_F_VERSION_1)))
+		return "The VIRTIO_F_VERSION_1 feature bit must be present!";
 
 	return NULL;
 }
