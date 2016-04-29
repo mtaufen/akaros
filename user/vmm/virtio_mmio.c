@@ -689,7 +689,7 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 							" combination of the features offered by the"
 							" device prior to attempting to set the FEATURES_OK"
 							" status bit. The bit will remain unset."
-							"\nReported error: %s", err);
+							"\n  Validation error: %s", err);
 						*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
 					}
 				}
