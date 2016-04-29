@@ -286,7 +286,7 @@ const char *virtio_validate_feat(uint32_t dev_id, uint64_t feat) {
 			       " this value indicates that the device is a system memory"
 			       " map with placeholder devices at static, well known"
 			       " addresses. In any case, this is not something you"
-			       " validate features for."
+			       " validate features for.";
 		default:
 			return "Validation not implemented for this device type!"
 			       " You MUST implement validation for this device!"

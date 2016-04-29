@@ -110,6 +110,7 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
 {
 	uint64_t offset = gpa - mmio_dev->addr;
 	uint8_t *target; // target of read from device-specific config space
+	const char *err; // returned err strings
 
 	// virtio-v1.0-cs04 s4.2.3.1.1 Device Initialization (MMIO section)
 	if (mmio_dev->vqdev->dev_id == 0
@@ -135,6 +136,10 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
 			return 0;
 		}
 	}
+
+	// Now we know that they provided a vqdev. First thing, validate the
+	// features the host is providing. If it's not a valid feature set, crash.
+	// TODO XXX
 
 	// Warn if FAILED status bit is set.
 	if (mmio_dev->status & VIRTIO_CONFIG_S_FAILED) {
@@ -353,6 +358,7 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 	struct virtio_vq *notified_queue;
 	uint8_t *target; // target of write to device-specific config space
 	void *temp_ptr; // for facilitating bitwise ops on pointers
+	const char *err; // returned err strings
 
 	if (!mmio_dev->vqdev) {
 		// If there is no vqdev on the mmio_dev,
@@ -661,16 +667,32 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 			}
 			else {
 				// NOTE: Don't set the FEATURES_OK bit unless the driver
-				//       activated a subset of the supported features prior to
-				//       attempting to set FEATURES_OK.
-
-				// TODO: We still need to check that no feature is accepted which
-				//       depends on a not-accepted feature! This will be a lot of work...
+				//       activated a valid subset of the supported features
+				//       prior to attempting to set FEATURES_OK.
 				if (!(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)
-				    && (*value & VIRTIO_CONFIG_S_FEATURES_OK)
-				    && (mmio_dev->vqdev->dri_feat
+				    && (*value & VIRTIO_CONFIG_S_FEATURES_OK)) {
+
+				    err = virtio_validate_feat(mmio_dev->vqdev->dev_id,
+				    	mmio_dev->vqdev->dri_feat);
+
+				    if ((mmio_dev->vqdev->dri_feat
 				    	& ~mmio_dev->vqdev->dev_feat)) {
-					*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
+				    	VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+				    		"The driver did not accept (e.g. activate) a"
+				    		" subset of the features offered by the device"
+				    		" prior to attempting to set the FEATURES_OK status"
+				    		" bit. The bit will remain unset.");
+					} else if (err) {
+						VIRTIO_DRI_WARNX(mmio_dev->vqdev,
+							"The driver did not accept (e.g. activate) a valid"
+							" combination of the features offered by the"
+							" device prior to attempting to set the FEATURES_OK"
+							" status bit. The bit will remain unset."
+							"\nReported error: %s", err);
+				    }
+
+						*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
+				    }
 				}
 				// Device status is only a byte wide.
 				mmio_dev->status = *value & 0xff;
