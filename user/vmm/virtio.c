@@ -272,15 +272,17 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 
 // Returns NULL if the features are valid, otherwise returns
 // an error string describing what part of validation failed
-const char *virtio_validate_feat(uint32_t dev_id, uint64_t feat) {
+// We pass the vqdev instead of just the dev_id in case we
+// also want to validate the device-specific config space.
+const char *virtio_validate_feat(struct virtio_vq_dev *vqdev, uint64_t feat) {
 
 	// First validate device-specific features. We want to tell someone
 	// when they forgot to implement validation code for a new device
 	// as soon as possible, so that they don't skip this when they
 	// implement new devices.
-	switch(dev_id) {
+	switch(vqdev->dev_id) {
 		// case VIRTIO_ID_CONSOLE:
-		// 	break;
+		//  	break;
 		case 0:
 			return "Invalid device id (0x0)! On the MMIO transport,"
 			       " this value indicates that the device is a system memory"
