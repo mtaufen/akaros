@@ -539,6 +539,10 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 				// virtio-v1.0-cs04 4.2.2.2 MMIO Device Register Layout
 				if (*value <= mmio_dev->vqdev->vqs[mmio_dev->qsel].qnum_max)
 					mmio_dev->vqdev->vqs[mmio_dev->qsel].vring.num = *value;
+				else if ((*value != 0) && (*value & ((*value) - 1)))
+					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
+						"The driver may only write powers of 2 to the"
+						" QueueNum register.");
 				else
 					VIRTIO_DRI_ERRX(mmio_dev->vqdev,
 						"Attempt to write value greater than QueueNumMax"
