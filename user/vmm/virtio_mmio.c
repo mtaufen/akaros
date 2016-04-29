@@ -682,17 +682,16 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 				    		" subset of the features offered by the device"
 				    		" prior to attempting to set the FEATURES_OK status"
 				    		" bit. The bit will remain unset.");
-					} else if (err) {
+				    	*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
+				    } else if (err) {
 						VIRTIO_DRI_WARNX(mmio_dev->vqdev,
 							"The driver did not accept (e.g. activate) a valid"
 							" combination of the features offered by the"
 							" device prior to attempting to set the FEATURES_OK"
 							" status bit. The bit will remain unset."
 							"\nReported error: %s", err);
-				    }
-
 						*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
-				    }
+					}
 				}
 				// Device status is only a byte wide.
 				mmio_dev->status = *value & 0xff;
