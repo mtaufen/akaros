@@ -472,6 +472,7 @@ static struct virtio_vq_dev cons_vqdev = {
 	                  // | (1 << VIRTIO_CONSOLE_F_EMERG_WRITE)
 	                  // | (1 << VIRTIO_CONSOLE_F_SIZE)
 	                  // | (1 << VIRTIO_CONSOLE_F_MULTIPORT)
+					     | (1 << VIRTIO_RING_F_INDIRECT_DESC)
 	                  ,
 	num_vqs: 2,
 	cfg: &cons_cfg,
