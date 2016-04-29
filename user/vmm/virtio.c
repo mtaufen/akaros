@@ -274,6 +274,7 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 // an error string describing what part of validation failed
 // We pass the vqdev instead of just the dev_id in case we
 // also want to validate the device-specific config space.
+// feat is the feature vector that you want to validate for the vqdev
 const char *virtio_validate_feat(struct virtio_vq_dev *vqdev, uint64_t feat) {
 
 	// First validate device-specific features. We want to tell someone
@@ -281,8 +282,9 @@ const char *virtio_validate_feat(struct virtio_vq_dev *vqdev, uint64_t feat) {
 	// as soon as possible, so that they don't skip this when they
 	// implement new devices.
 	switch(vqdev->dev_id) {
-		// case VIRTIO_ID_CONSOLE:
-		//  	break;
+		case VIRTIO_ID_CONSOLE:
+			// No interdependent features for the console.
+		  	break;
 		case 0:
 			return "Invalid device id (0x0)! On the MMIO transport,"
 			       " this value indicates that the device is a system memory"
@@ -297,7 +299,9 @@ const char *virtio_validate_feat(struct virtio_vq_dev *vqdev, uint64_t feat) {
 			break;
 	}
 
-	// Validate that general feature set is valid
+	// Validate common features
+	if (!(feat & VIRTIO_F_VERSION_1))
+		return "The VIRTIO_F_VERSION_1 feature bit must be present!"
 
 	return NULL;
 }

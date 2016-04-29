@@ -118,4 +118,5 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 // an error string describing what part of validation failed
 // We pass the vqdev instead of just the dev_id in case we
 // also want to validate the device-specific config space.
+// feat is the feature vector that you want to validate for the vqdev
 const char *virtio_validate_feat(struct virtio_vq_dev *vqdev, uint64_t feat);
