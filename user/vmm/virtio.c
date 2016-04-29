@@ -301,7 +301,7 @@ const char *virtio_validate_feat(struct virtio_vq_dev *vqdev, uint64_t feat) {
 	}
 
 	// Validate common features
-	if (!(feat & (1<<VIRTIO_F_VERSION_1)))
+	if (!(feat & ((uint64_t)1<<VIRTIO_F_VERSION_1)))
 		return "The VIRTIO_F_VERSION_1 feature bit must be present!";
 
 	return NULL;
