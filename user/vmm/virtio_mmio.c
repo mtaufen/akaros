@@ -137,9 +137,24 @@ uint32_t virtio_mmio_rd(struct virtio_mmio_dev *mmio_dev,
 		}
 	}
 
-	// Now we know that they provided a vqdev. First thing, validate the
-	// features the host is providing. If it's not a valid feature set, crash.
-	// TODO XXX
+	// Now we know that they provided a vqdev. As soon as the driver tries
+	// to read the magic number, we know it's considering the device. This is
+	// a great time to validate the features the host is providing. The host
+	// must provide a valid combination of features, or we crash here
+	// until the offered feature combination is made valid.
+	if (offset == VIRTIO_MMIO_MAGIC_VALUE) {
+		// NOTE: If you ever decide to change this to a warning instead of an
+		//       error, you might want to return an invalid magic value here
+		//       to tell the driver that it is poking at a bad device.
+		err = virtio_validate_feat(mmio_dev->vqdev->dev_id,
+		                           mmio_dev->vqdev->dev_feat);
+		if (err)
+			VIRTIO_DEV_ERRX(mmio_dev->vqdev,
+				"The feature combination offered by the device is not valid."
+				" This must be fixed before the device can be used."
+				"\n  Validation Error: %s", err);
+	}
+
 
 	// Warn if FAILED status bit is set.
 	if (mmio_dev->status & VIRTIO_CONFIG_S_FAILED) {
@@ -689,7 +704,7 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 							" combination of the features offered by the"
 							" device prior to attempting to set the FEATURES_OK"
 							" status bit. The bit will remain unset."
-							"\n  Validation error: %s", err);
+							"\n  Validation Error: %s", err);
 						*value &= ~VIRTIO_CONFIG_S_FEATURES_OK;
 					}
 				}
