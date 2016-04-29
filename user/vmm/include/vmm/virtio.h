@@ -100,16 +100,20 @@ struct virtio_vq_dev {
 	struct virtio_vq vqs[];
 };
 
+// Validates memory regions provided by the guest's virtio driver
+void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
+                           uint32_t size, char *file, uint32_t line);
+
+// Adds descriptor chain to the used ring of the vq
+// Based on add_used in Linux's lguest.c
+void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len);
+
 // Waits for the next available descriptor chain and writes the addresses
 // and sizes of the buffers it describes to an iovec to make them easy to use.
 // Based on wait_for_vq_desc in Linux lguest.c
 uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
                             uint32_t *olen, uint32_t *ilen);
 
-// Adds descriptor chain to the used ring of the vq
-// Based on add_used in Linux's lguest.c
-void virtio_add_used_desc(struct virtio_vq *vq, uint32_t head, uint32_t len);
-
-// Validates memory regions provided by the guest's virtio driver
-void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
-                           uint32_t size, char *file, uint32_t line);
+// Returns NULL if the features are valid, otherwise returns
+// an error string describing what part of validation failed
+const char *virtio_validate_feat(uint32_t dev_id, uint64_t feat);

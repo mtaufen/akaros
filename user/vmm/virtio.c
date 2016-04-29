@@ -5,6 +5,7 @@
 #include <sys/eventfd.h>
 #include <sys/uio.h>
 #include <vmm/virtio.h>
+#include <vmm/virtio_ids.h>
 
 // based on _check_pointer in Linux's lguest.c
 void *virtio_check_pointer(struct virtio_vq *vq, uint64_t addr,
@@ -267,4 +268,34 @@ uint32_t virtio_next_avail_vq_desc(struct virtio_vq *vq, struct iovec iov[],
 
 	return head;
 
+}
+
+// Returns NULL if the features are valid, otherwise returns
+// an error string describing what part of validation failed
+const char *virtio_validate_feat(uint32_t dev_id, uint64_t feat) {
+
+	// First validate device-specific features. We want to tell someone
+	// when they forgot to implement validation code for a new device
+	// as soon as possible, so that they don't skip this when they
+	// implement new devices.
+	switch(dev_id) {
+		// case VIRTIO_ID_CONSOLE:
+		// 	break;
+		case 0:
+			return "Invalid device id (0x0)! On the MMIO transport,"
+			       " this value indicates that the device is a system memory"
+			       " map with placeholder devices at static, well known"
+			       " addresses. In any case, this is not something you"
+			       " validate features for."
+		default:
+			return "Validation not implemented for this device type!"
+			       " You MUST implement validation for this device!"
+			       " You should add your new code to the virtio_validate_feat"
+			       " function in vmm/virtio.c.";
+			break;
+	}
+
+	// Validate that general feature set is valid
+
+	return NULL;
 }

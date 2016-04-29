@@ -644,11 +644,11 @@ void virtio_mmio_wr(struct virtio_mmio_dev *mmio_dev, uint64_t gpa,
 			}
 
 			// NOTE: For now, we allow the driver to set all status bits up
-			//       through FEATURES_OK in one fell swoop. The driver is, however,
-			//       required to re-read FEATURES_OK after setting it to be sure
-			//       that the driver-activated features are a subset of those
-			//       supported by the device, so it must make an additional write
-			//       to set DRIVER_OK.
+			//       through FEATURES_OK in one fell swoop. The driver is,
+			//       however, required to re-read FEATURES_OK after setting it
+			//       to be sure that the driver-activated features are a subset
+			//       of those supported by the device, so it must make an
+			//       additional write to set DRIVER_OK.
 
 			else if ((*value & VIRTIO_CONFIG_S_DRIVER_OK)
 			         && !(mmio_dev->status & VIRTIO_CONFIG_S_FEATURES_OK)) {
