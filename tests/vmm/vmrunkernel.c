@@ -17,14 +17,22 @@
 #include <vmm/acpi/acpi.h>
 #include <vmm/acpi/vmm_simple_dsdt.h>
 #include <ros/arch/mmu.h>
+#include <ros/arch/membar.h>
 #include <ros/vmm.h>
 #include <parlib/uthread.h>
 #include <vmm/linux_bootparam.h>
+
 #include <vmm/virtio.h>
 #include <vmm/virtio_mmio.h>
 #include <vmm/virtio_ids.h>
 #include <vmm/virtio_config.h>
+#include <vmm/virtio_console.h>
+#include <vmm/virtio_lguest_console.h>
+
 #include <vmm/sched.h>
+
+#include <sys/eventfd.h>
+#include <sys/uio.h>
 
 struct vmctl vmctl;
 struct vmm_gpcore_init gpci;
@@ -356,139 +364,52 @@ void *timer_thread(void *arg)
 	fprintf(stderr, "SENDING TIMER\n");
 }
 
-void *consout(void *arg)
-{
-	char *line, *consline, *outline;
-	static struct scatterlist out[] = { {NULL, sizeof(outline)}, };
-	static struct scatterlist in[] = { {NULL, sizeof(line)}, };
-	static struct scatterlist iov[32];
-	struct virtio_threadarg *a = arg;
-	static unsigned int inlen, outlen, conslen;
-	struct virtqueue *v = a->arg->virtio;
-	fprintf(stderr, "talk thread ..\n");
-	uint16_t head, gaveit = 0, gotitback = 0;
-	uint32_t vv;
-	int i;
-	int num;
 
-	if (debug) {
-		fprintf(stderr, "----------------------- TT a %p\n", a);
-		fprintf(stderr, "talk thread ttargs %x v %x\n", a, v);
-	}
-
-	for(num = 0;;num++) {
-		//int debug = 1;
-		/* host: use any buffers we should have been sent. */
-		head = wait_for_vq_desc(v, iov, &outlen, &inlen);
-		if (debug)
-			fprintf(stderr, "CCC: vq desc head %d, gaveit %d gotitback %d\n", head, gaveit, gotitback);
-		for(i = 0; debug && i < outlen + inlen; i++)
-			fprintf(stderr, "CCC: v[%d/%d] v %p len %d\n", i, outlen + inlen, iov[i].v, iov[i].length);
-		/* host: if we got an output buffer, just output it. */
-		for(i = 0; i < outlen; i++) {
-			num++;
-			int j;
-			if (debug) {
-				fprintf(stderr, "CCC: IOV length is %d\n", iov[i].length);
-			}
-			for (j = 0; j < iov[i].length; j++)
-				printf("%c", ((char *)iov[i].v)[j]);
-		}
-		fflush(stdout);
-		if (debug)
-			fprintf(stderr, "CCC: outlen is %d; inlen is %d\n", outlen, inlen);
-		/* host: fill in the writeable buffers. */
-		/* why we're getting these I don't know. */
-		for (i = outlen; i < outlen + inlen; i++) {
-			if (debug) fprintf(stderr, "CCC: send back empty writeable");
-			iov[i].length = 0;
-		}
-		if (debug) fprintf(stderr, "CCC: call add_used\n");
-		/* host: now ack that we used them all. */
-		add_used(v, head, outlen+inlen);
-		if (debug) fprintf(stderr, "CCC: DONE call add_used\n");
-	}
-	fprintf(stderr, "All done\n");
-	return NULL;
-}
 
 // FIXME.
 volatile int consdata = 0;
 
-void *consin(void *arg)
+
+static void virtio_poke_guest(void)
 {
-	struct virtio_threadarg *a = arg;
-	char *line, *outline;
-	static char consline[128];
-	static struct scatterlist iov[32];
-	static struct scatterlist out[] = { {NULL, sizeof(outline)}, };
-	static struct scatterlist in[] = { {NULL, sizeof(line)}, };
-
-	static unsigned int inlen, outlen, conslen;
-	struct virtqueue *v = a->arg->virtio;
-	fprintf(stderr, "consin thread ..\n");
-	uint16_t head, gaveit = 0, gotitback = 0;
-	uint32_t vv;
-	int i;
-	int num;
-	//char c[1];
-
-	if (debug) fprintf(stderr, "Spin on console being read, print num queues, halt\n");
-
-	for(num = 0;! quit;num++) {
-		//int debug = 1;
-		/* host: use any buffers we should have been sent. */
-		head = wait_for_vq_desc(v, iov, &outlen, &inlen);
-		if (debug)
-			fprintf(stderr, "vq desc head %d, gaveit %d gotitback %d\n", head, gaveit, gotitback);
-		for(i = 0; debug && i < outlen + inlen; i++)
-			fprintf(stderr, "v[%d/%d] v %p len %d\n", i, outlen + inlen, iov[i].v, iov[i].length);
-		if (debug)
-			fprintf(stderr, "outlen is %d; inlen is %d\n", outlen, inlen);
-		/* host: fill in the writeable buffers. */
-		for (i = outlen; i < outlen + inlen; i++) {
-			/* host: read a line. */
-			memset(consline, 0, 128);
-			if (read(0, consline, 1) < 0) {
-				exit(0);
-			}
-			if (debug) fprintf(stderr, "CONSIN: GOT A LINE:%s:\n", consline);
-			if (debug) fprintf(stderr, "CONSIN: OUTLEN:%d:\n", outlen);
-			if (strlen(consline) < 3 && consline[0] == 'q' ) {
-				quit = 1;
-				break;
-			}
-
-			memmove(iov[i].v, consline, strlen(consline)+ 1);
-			iov[i].length = strlen(consline) + 1;
-		}
-		if (debug) fprintf(stderr, "call add_used\n");
-		/* host: now ack that we used them all. */
-		add_used(v, head, outlen+inlen);
-		/* turn off consdata - the IRQ injection isn't right */
-		//consdata = 1;
-		if (debug) fprintf(stderr, "DONE call add_used\n");
-
-		// Send spurious for testing (Gan)
-		set_posted_interrupt(0xE5);
-		virtio_mmio_set_vring_irq();
-
-		ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
-	}
-	fprintf(stderr, "All done\n");
-	return NULL;
+	set_posted_interrupt(0xE5);
+	ros_syscall(SYS_vmm_poke_guest, 0, 0, 0, 0, 0, 0);
 }
 
-static struct vqdev vqdev= {
-name: "console",
-dev: VIRTIO_ID_CONSOLE,
-device_features: 0, /* Can't do it: linux console device does not support it. VIRTIO_F_VERSION_1*/
-numvqs: 2,
-vqs: {
-		{name: "consin", maxqnum: 64, f: consin, arg: (void *)0},
-		{name: "consout", maxqnum: 64, f: consout, arg: (void *)0},
-	}
+static struct virtio_mmio_dev cons_mmio_dev = {
+	.poke_guest = virtio_poke_guest
 };
+
+static struct virtio_console_config cons_cfg;
+static struct virtio_console_config cons_cfg_d;
+
+static struct virtio_vq_dev cons_vqdev = {
+	.name = "console",
+	.dev_id = VIRTIO_ID_CONSOLE,
+	.dev_feat = ((uint64_t)1 << VIRTIO_F_VERSION_1)
+					  | (1 << VIRTIO_RING_F_INDIRECT_DESC)
+	                  ,
+	.num_vqs = 2,
+	.cfg = &cons_cfg,
+	.cfg_d = &cons_cfg_d,
+	.cfg_sz = sizeof(struct virtio_console_config),
+	.transport_dev = &cons_mmio_dev,
+	.vqs = {
+			{
+				.name = "cons_receiveq",
+				.qnum_max = 64,
+				.srv_fn = cons_receiveq_fn,
+				.vqdev = &cons_vqdev
+			},
+			{
+				.name = "cons_transmitq",
+				.qnum_max = 64,
+				.srv_fn = cons_transmitq_fn,
+				.vqdev = &cons_vqdev
+			},
+		}
+};
+
 
 void lowmem() {
 	__asm__ __volatile__ (".section .lowmem, \"aw\"\n\tlow: \n\t.=0x1000\n\t.align 0x100000\n\t.previous\n");
@@ -894,10 +815,9 @@ int main(int argc, char **argv)
 	vmctl.regs.tf_rsp = (uint64_t) &stack[1024];
 	vmctl.regs.tf_rsi = (uint64_t) bp;
 	if (mcp) {
-		/* set up virtio bits, which depend on threads being enabled. */
-		register_virtio_mmio(&vqdev, virtio_mmio_base);
+		cons_mmio_dev.addr = virtio_mmio_base;
+		cons_mmio_dev.vqdev = &cons_vqdev;
 	}
-	fprintf(stderr, "threads started\n");
 	fprintf(stderr, "Writing command :%s:\n", cmd);
 
 	if (debug)
@@ -953,12 +873,21 @@ int main(int argc, char **argv)
 			}
 			if (debug) fprintf(stderr, "%p %p %p %p %p %p\n", gpa, regx, regp, store, size, advance);
 			if ((gpa & ~0xfffULL) == virtiobase) {
-				if (debug) fprintf(stderr, "DO SOME VIRTIO\n");
-				// Lucky for us the various virtio ops are well-defined.
-				virtio_mmio((struct guest_thread *)vm_thread, gpa, regx, regp,
-				            store);
-				if (debug) fprintf(stderr, "store is %d:\n", store);
-				if (debug) fprintf(stderr, "REGP IS %16x:\n", *regp);
+				if (size < 0) {
+					// TODO: It would be preferable for the decoder to return an
+					//       unsigned value, so that we don't have to worry
+					//       about this. I don't know if it's even possible for
+					//       the width to be negative;
+					VIRTIO_DRI_ERRX(cons_mmio_dev.vqdev,
+						"Driver tried to access the device with a negative access width in the instruction?");
+				}
+				//fprintf(stderr, "RIP is 0x%x\n", vm_tf->tf_rip);
+				if (store) {
+					virtio_mmio_wr(&cons_mmio_dev, gpa, size, (uint32_t *)regp);
+				} else {
+					*regp = virtio_mmio_rd(&cons_mmio_dev, gpa, size);
+				}
+
 			} else if ((gpa & 0xfee00000) == 0xfee00000) {
 				// until we fix our include mess, just put the proto here.
 				//int apic(struct vmctl *v, uint64_t gpa, int destreg, uint64_t *regp, int store);
@@ -1017,7 +946,7 @@ int main(int argc, char **argv)
 			case EXIT_REASON_INTERRUPT_WINDOW:
 				if (consdata) {
 					if (debug) fprintf(stderr, "inject an interrupt\n");
-					virtio_mmio_set_vring_irq();
+					virtio_mmio_set_vring_irq(&cons_mmio_dev);
 					vm_tf->tf_trap_inject = 0x80000000 | virtioirq;
 					//vmctl.command = RESUME;
 					consdata = 0;
@@ -1121,7 +1050,7 @@ int main(int argc, char **argv)
 				fprintf(stderr, "XINT 0x%x 0x%x\n", vm_tf->tf_intrinfo1,
 				        vm_tf->tf_intrinfo2);
 			vm_tf->tf_trap_inject = 0x80000000 | virtioirq;
-			virtio_mmio_set_vring_irq();
+			virtio_mmio_set_vring_irq(&cons_mmio_dev);
 			consdata = 0;
 			//debug = 1;
 			//vmctl.command = RESUME;
